@@ -12,17 +12,33 @@
 
 <div class="auth-shell" id="authShell">
   <div class="auth-card">
-    <div class="auth-brand">
-      <div class="totem-mark">
-        <span style="height:10px;"></span>
-        <span style="height:16px;"></span>
-        <span style="height:22px;"></span>
-        <span style="height:28px;"></span>
-      </div>
-      <h1>TOTEM<sup class="tm">™</sup></h1>
+    <img class="auth-logo" src="totem-logo.png" alt="Totem — Build your team, block by block">
+    <p class="auth-tagline" id="authTagline">Sign in to your club account</p>
+
+    <div class="auth-toggle">
+      <button type="button" class="active" data-mode="login">Log in</button>
+      <button type="button" data-mode="signup">Sign up</button>
     </div>
-    <p class="auth-tagline">Sign in to your club account</p>
+
     <div id="authError" class="auth-error" style="display:none;"></div>
+    <div id="authInfo" class="auth-info" style="display:none;"></div>
+
+    <!-- signup-only: which kind of signup -->
+    <div class="field" id="signupTypeField" style="display:none;">
+      <div class="auth-toggle">
+        <button type="button" class="active" data-signup-type="create">Create a new club</button>
+        <button type="button" data-signup-type="join">Join an existing club</button>
+      </div>
+    </div>
+    <div class="field" id="orgNameField" style="display:none;">
+      <label>Club / school / team name</label>
+      <input type="text" id="authOrgName" placeholder="e.g. Riverside Primary">
+    </div>
+    <div class="field" id="inviteCodeField" style="display:none;">
+      <label>Invite code</label>
+      <input type="text" id="authInviteCode" placeholder="8-character code from your club admin">
+    </div>
+
     <div class="field">
       <label>Email</label>
       <input type="email" id="authEmail" autocomplete="username">
@@ -32,7 +48,7 @@
       <input type="password" id="authPassword" autocomplete="current-password">
     </div>
     <button class="btn btn-primary" id="btnLogin" style="width:100%;">Log in</button>
-    <p class="auth-hint">Accounts are created by your club admin — contact them if you don't have one yet.</p>
+    <p class="auth-hint" id="authHint">Don't have an account? Use the Sign up tab above.</p>
   </div>
 </div>
 
@@ -40,16 +56,14 @@
 <header class="top">
   <div class="header-account" id="headerAccount" style="display:none;">
     <span id="headerAccountEmail"></span>
+    <button type="button" id="btnInviteStaff" style="display:none;">Invite staff</button>
+    <button type="button" id="btnRenameClub" style="display:none;">Rename club</button>
     <button type="button" id="btnLogout">Log out</button>
   </div>
   <div class="brand-row">
-    <div class="totem-mark">
-      <span style="height:10px;"></span>
-      <span style="height:16px;"></span>
-      <span style="height:22px;"></span>
-      <span style="height:28px;"></span>
-    </div>
+    <div class="totem-mark-icon"><img src="totem-icon-white.png" alt="Totem"></div>
     <h1>TOTEM<sup class="tm">™</sup></h1>
+    <span class="org-badge" id="orgBadge" style="display:none;"></span>
   </div>
   <p class="tagline">Build your team, block by block.</p>
   <nav class="sports" id="sportTabs"></nav>
@@ -87,13 +101,17 @@
         <div class="multiselect-panel" id="inPositionsMulti"></div>
       </div>
     </div>
+    <div class="field">
+      <label>VO2 max (optional)</label>
+      <input type="number" id="inVo2max" min="10" max="90" step="0.1" placeholder="e.g. 48.5" style="width:100px;">
+    </div>
     <button class="btn btn-primary" id="btnAddPlayer">+ Add player</button>
   </div>
-  <p class="dob-hint">Age group is based on the age a player turns during this calendar year — e.g. anyone turning 9 this year plays U9, whether or not their birthday has happened yet.</p>
+  <p class="dob-hint">Age group is based on the age a player turns during this calendar year — e.g. anyone turning 9 this year plays U9, whether or not their birthday has happened yet. VO2 max is read from whatever fitness app/device a family already uses (Garmin, Apple Fitness, Samsung Health, Suunto) and typed in — no device connection needed.</p>
 
   <div class="section-title">
     <h2>Metric fields</h2>
-    <button class="settings-toggle" id="toggleMetrics">⚙ manage fields</button>
+    <button class="settings-toggle" id="toggleMetrics">Manage fields</button>
   </div>
   <div class="panel metric-manager" id="metricManager">
     <div id="metricFieldList"></div>
@@ -105,7 +123,7 @@
 
   <div class="section-title">
     <h2 id="positionsTitle">Positions</h2>
-    <button class="settings-toggle" id="togglePositions">⚙ manage positions</button>
+    <button class="settings-toggle" id="togglePositions">Manage positions</button>
   </div>
   <div class="panel metric-manager" id="positionsManager">
     <div class="field" id="positionsAgeGroupField" style="display:none; margin-bottom:10px;">
@@ -208,7 +226,7 @@
 
   <footer class="note">
     Totem stores your roster locally to this app. Ratings are out of 10 per metric.
-    <span class="legal">Totem™ is a trademark of D.S.Blom. All rights reserved.</span>
+    <span class="legal">Totem™ is a trademark of Hyperianlabs. All rights reserved.</span>
   </footer>
 </main>
 
@@ -269,12 +287,31 @@
   </div>
 </div>
 
-<div class="overlay" id="sportModal">
+<div class="overlay" id="renameClubModal">
   <div class="modal">
+    <h3>Rename club</h3>
+    <div class="field">
+      <label>Club / school / team name</label>
+      <input type="text" id="renameClubInput" placeholder="e.g. Kingsmead">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost btn-small" id="cancelRenameClub">Cancel</button>
+      <button class="btn btn-primary btn-small" id="confirmRenameClub">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="sportModal">
+  <div class="modal modal-wide">
     <h3>Add a sport</h3>
     <div class="field">
       <label>Sport name</label>
       <input type="text" id="newSportName" placeholder="e.g. Rugby">
+    </div>
+    <div class="field">
+      <label>Icon</label>
+      <div class="icon-picker" id="newSportIconPicker"></div>
+      <p class="icon-picker-hint">No match? No problem — Totem shows a clean initials badge automatically.</p>
     </div>
     <div class="field">
       <label id="newSportPositionsLabel">Positions (comma separated)</label>

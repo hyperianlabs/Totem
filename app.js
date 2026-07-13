@@ -7,37 +7,125 @@
     window.TOTEM_CONFIG.SUPABASE_ANON_KEY,
     { auth: { persistSession: false, autoRefreshToken: true } } // require login every time the app is opened
   );
-  const CLUB_STATE_ROW_ID = 1;
   let currentUser = null;
+  let currentOrgId = null;
+  let currentOrgName = null;
+  let currentUserRole = null;
+  let authMode = "login"; // 'login' | 'signup'
+  let signupType = "create"; // 'create' | 'join'
 
-  function showApp(user){
+  function showApp(user, orgName){
     currentUser = user;
     document.getElementById("authShell").style.display = "none";
     document.getElementById("appRoot").style.display = "";
     document.getElementById("headerAccount").style.display = "flex";
     document.getElementById("headerAccountEmail").textContent = user.email;
+    const badge = document.getElementById("orgBadge");
+    if(orgName){
+      badge.textContent = orgName;
+      badge.style.display = "";
+    } else {
+      badge.style.display = "none";
+    }
     loadState();
   }
   function showAuth(){
     currentUser = null;
+    currentOrgId = null;
     document.getElementById("appRoot").style.display = "none";
     document.getElementById("headerAccount").style.display = "none";
+    document.getElementById("orgBadge").style.display = "none";
     document.getElementById("authShell").style.display = "flex";
   }
   function authError(msg){
     const el = document.getElementById("authError");
+    document.getElementById("authInfo").style.display = "none";
     el.textContent = msg;
     el.style.display = "block";
   }
+  function authInfoMsg(msg){
+    const el = document.getElementById("authInfo");
+    document.getElementById("authError").style.display = "none";
+    el.textContent = msg;
+    el.style.display = "block";
+  }
+
+  // Every account belongs to exactly one organization (club/school/team).
+  // This looks up which one for the signed-in user, and RLS ensures they
+  // can only ever see data belonging to that org.
+  async function resolveOrgAndEnter(user){
+    const { data, error } = await supabaseClient
+      .from("team_members")
+      .select("org_id, role, organizations(name)")
+      .eq("id", user.id)
+      .single();
+    if(error || !data || !data.org_id){
+      authError("Your account isn't linked to a club yet. If you just signed up, this can take a few seconds — try logging in again, or contact your club admin.");
+      await supabaseClient.auth.signOut();
+      return;
+    }
+    currentOrgId = data.org_id;
+    currentUserRole = data.role;
+    currentOrgName = data.organizations ? data.organizations.name : null;
+    document.getElementById("btnInviteStaff").style.display = currentUserRole === "owner" ? "" : "none";
+    document.getElementById("btnRenameClub").style.display = currentUserRole === "owner" ? "" : "none";
+    showApp(user, currentOrgName);
+  }
+
+  function setAuthMode(mode){
+    authMode = mode;
+    document.querySelectorAll(".auth-toggle button[data-mode]").forEach(b => b.classList.toggle("active", b.dataset.mode === mode));
+    const isSignup = mode === "signup";
+    document.getElementById("signupTypeField").style.display = isSignup ? "" : "none";
+    document.getElementById("orgNameField").style.display = (isSignup && signupType === "create") ? "" : "none";
+    document.getElementById("inviteCodeField").style.display = (isSignup && signupType === "join") ? "" : "none";
+    document.getElementById("btnLogin").textContent = isSignup ? "Sign up" : "Log in";
+    document.getElementById("authTagline").textContent = isSignup ? "Set up your club's account" : "Sign in to your club account";
+    document.getElementById("authHint").textContent = isSignup
+      ? "Already have an account? Use the Log in tab above."
+      : "Don't have an account? Use the Sign up tab above.";
+    document.getElementById("authError").style.display = "none";
+    document.getElementById("authInfo").style.display = "none";
+  }
+  function setSignupType(type){
+    signupType = type;
+    document.querySelectorAll(".auth-toggle button[data-signup-type]").forEach(b => b.classList.toggle("active", b.dataset.signupType === type));
+    document.getElementById("orgNameField").style.display = type === "create" ? "" : "none";
+    document.getElementById("inviteCodeField").style.display = type === "join" ? "" : "none";
+  }
+  document.querySelectorAll(".auth-toggle button[data-mode]").forEach(b => b.addEventListener("click", () => setAuthMode(b.dataset.mode)));
+  document.querySelectorAll(".auth-toggle button[data-signup-type]").forEach(b => b.addEventListener("click", () => setSignupType(b.dataset.signupType)));
 
   async function handleLogin(){
     const email = document.getElementById("authEmail").value.trim();
     const password = document.getElementById("authPassword").value;
     document.getElementById("authError").style.display = "none";
+    document.getElementById("authInfo").style.display = "none";
     if(!email || !password){ authError("Enter your email and password."); return; }
+
+    if(authMode === "signup"){
+      const orgName = document.getElementById("authOrgName").value.trim();
+      const inviteCode = document.getElementById("authInviteCode").value.trim();
+      if(signupType === "create" && !orgName){ authError("Enter your club, school, or team's name."); return; }
+      if(signupType === "join" && !inviteCode){ authError("Enter the invite code your club admin gave you."); return; }
+
+      const { data, error } = await supabaseClient.auth.signUp({
+        email, password,
+        options: { data: signupType === "create" ? { org_name: orgName } : { invite_code: inviteCode } }
+      });
+      if(error){ authError(error.message); return; }
+      if(data.user && !data.session){
+        authInfoMsg("Check your inbox to confirm your email, then log in.");
+        setAuthMode("login");
+        return;
+      }
+      if(data.user) await resolveOrgAndEnter(data.user);
+      return;
+    }
+
     const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
     if(error){ authError(error.message); return; }
-    showApp(data.user);
+    await resolveOrgAndEnter(data.user);
   }
   document.getElementById("btnLogin").addEventListener("click", handleLogin);
   document.getElementById("authPassword").addEventListener("keydown", (e) => { if(e.key === "Enter") handleLogin(); });
@@ -45,11 +133,47 @@
     await supabaseClient.auth.signOut();
     showAuth();
   });
+  document.getElementById("btnInviteStaff").addEventListener("click", async () => {
+    const { data, error } = await supabaseClient
+      .from("organizations")
+      .select("invite_code")
+      .eq("id", currentOrgId)
+      .single();
+    if(error || !data){ alert("Could not load your invite code — try again shortly."); return; }
+    alert(`Share this invite code with staff you want to add to ${currentOrgName || "your club"}:\n\n${data.invite_code}\n\nThey pick "Sign up → Join an existing club" and enter it there.`);
+  });
+
+  document.getElementById("btnRenameClub").addEventListener("click", () => {
+    document.getElementById("renameClubInput").value = currentOrgName || "";
+    document.getElementById("renameClubModal").classList.add("open");
+  });
+  document.getElementById("cancelRenameClub").addEventListener("click", () => {
+    document.getElementById("renameClubModal").classList.remove("open");
+  });
+  document.getElementById("renameClubModal").addEventListener("click", (e) => {
+    if(e.target.id === "renameClubModal") document.getElementById("renameClubModal").classList.remove("open");
+  });
+  document.getElementById("confirmRenameClub").addEventListener("click", async () => {
+    const newName = document.getElementById("renameClubInput").value.trim();
+    if(!newName){ alert("Enter a club name."); return; }
+    const { error } = await supabaseClient
+      .from("organizations")
+      .update({ name: newName })
+      .eq("id", currentOrgId);
+    if(error){ alert("Could not rename your club — " + error.message); return; }
+    currentOrgName = newName;
+    const badge = document.getElementById("orgBadge");
+    badge.textContent = newName;
+    badge.style.display = "";
+    document.getElementById("headerAccountEmail").textContent = currentUser.email;
+    document.getElementById("renameClubModal").classList.remove("open");
+    showToast(`Club renamed to ${newName}.`);
+  });
 
   // persistSession is off, so this will normally find nothing and show the
   // login screen — but check anyway in case a session is still live in-memory.
   supabaseClient.auth.getSession().then(({ data }) => {
-    if(data.session && data.session.user) showApp(data.session.user);
+    if(data.session && data.session.user) resolveOrgAndEnter(data.session.user);
     else showAuth();
   });
 
@@ -75,10 +199,10 @@
   const ATHLETICS_ALL_EVENTS = [...new Set(Object.values(ATHLETICS_EVENTS_BY_AGE_GROUP).flat())];
 
   const DEFAULT_SPORTS = [
-    { id:"netball", name:"Netball", icon:"🏐", type:"team", positions:["GS","GA","WA","C","WD","GD","GK"] },
-    { id:"hockey", name:"Field Hockey", icon:"🏑", type:"team", positions:["Goalkeeper","Right Back","Left Back","Right Half","Left Half","Right Wing","Centre Forward","Left Wing"] },
-    { id:"swimming", name:"Swimming", icon:"🏊", type:"individual", positions:["Freestyle","Backstroke","Breaststroke","Butterfly","Individual Medley"] },
-    { id:"athletics", name:"Athletics", icon:"🏃", type:"individual", positions: ATHLETICS_ALL_EVENTS, eventsByAgeGroup: ATHLETICS_EVENTS_BY_AGE_GROUP }
+    { id:"netball", name:"Netball", iconKey:"netball", type:"team", positions:["GS","GA","WA","C","WD","GD","GK"] },
+    { id:"hockey", name:"Field Hockey", iconKey:"hockey", type:"team", positions:["Goalkeeper","Right Back","Left Back","Right Half","Left Half","Right Wing","Centre Forward","Left Wing"] },
+    { id:"swimming", name:"Swimming", iconKey:"swimming", type:"individual", positions:["Freestyle","Backstroke","Breaststroke","Butterfly","Individual Medley"] },
+    { id:"athletics", name:"Athletics", iconKey:"athletics", type:"individual", positions: ATHLETICS_ALL_EVENTS, eventsByAgeGroup: ATHLETICS_EVENTS_BY_AGE_GROUP }
   ];
   const DEFAULT_FIELDS = [
     {key:"fitness", label:"Fitness"},
@@ -127,9 +251,9 @@
   // ---------- storage ----------
   async function fetchClubState(){
     const { data, error } = await supabaseClient
-      .from("club_state")
+      .from("org_state")
       .select("data")
-      .eq("id", CLUB_STATE_ROW_ID)
+      .eq("org_id", currentOrgId)
       .single();
     if(error){
       console.warn("Totem: could not load club data —", error.message);
@@ -139,9 +263,9 @@
   }
   async function persistClubState(){
     const { error } = await supabaseClient
-      .from("club_state")
+      .from("org_state")
       .update({ data: state, updated_at: new Date().toISOString(), updated_by: currentUser ? currentUser.id : null })
-      .eq("id", CLUB_STATE_ROW_ID);
+      .eq("org_id", currentOrgId);
     if(error) console.warn("Totem: could not save —", error.message);
   }
 
@@ -514,7 +638,7 @@
 
     if(list.length === 0){
       grid.innerHTML = `<div class="roster-empty" style="grid-column:1/-1;">
-        <span class="glyph">🧑‍🏫</span>
+        <span class="glyph">${uiIcon("coach", 34)}</span>
         <h3>No head coaches assigned</h3>
         <div>Assign a head coach to each age group above so everyone knows who's leading which team.</div>
       </div>`;
@@ -579,7 +703,7 @@
     state.sports.forEach(s => {
       const btn = document.createElement("button");
       btn.className = "sport-tab" + (s.id === state.activeSport ? " active" : "");
-      btn.innerHTML = `<span class="icon">${s.icon || "🏅"}</span><span>${escapeHtml(s.name)}</span>`;
+      btn.innerHTML = `<span class="icon">${sportIconHtml(s, 16)}</span><span>${escapeHtml(s.name)}</span>`;
       btn.addEventListener("click", () => { state.activeSport = s.id; expandedPlayerId = null; sidesActiveAgeGroup = null; openFixtureId = null; openTrialId = null; dashboardAgeGroup = null; render(); });
       nav.appendChild(btn);
     });
@@ -682,7 +806,7 @@
     const isIndividual = sportType(sport) === "individual";
     const noun = isIndividual ? "Events" : "Positions";
     document.getElementById("positionsTitle").textContent = noun;
-    document.getElementById("togglePositions").textContent = `⚙ manage ${noun.toLowerCase()}`;
+    document.getElementById("togglePositions").textContent = `Manage ${noun.toLowerCase()}`;
     document.getElementById("newPositionName").placeholder = `Add a new ${isIndividual ? "event" : "position"}`;
 
     const hasPerGroup = !!sport.eventsByAgeGroup;
@@ -777,7 +901,7 @@
 
     if(players.length === 0){
       grid.innerHTML = `<div class="roster-empty" style="grid-column:1/-1;">
-        <span class="glyph">🪵</span>
+        <span class="glyph">${uiIcon("playerPlus", 34)}</span>
         <h3>No players yet</h3>
         <div>Add your first ${escapeHtml(sport.name.toLowerCase())} player above to start building the totem.</div>
       </div>`;
@@ -799,7 +923,7 @@
           <div class="card-head">
             <div>
               <p class="name">${escapeHtml(p.name)}</p>
-              <div class="meta">${formatDob(p.birthDate)} · ${ageGroupForPlayer(p)}${p.dobEstimated ? ' <span class="dob-estimated" title="Estimated during migration — edit with a real date of birth when convenient">⚠ estimated DOB</span>' : ""}</div>
+              <div class="meta">${formatDob(p.birthDate)} · ${ageGroupForPlayer(p)}${p.dobEstimated ? ` <span class="dob-estimated" title="Estimated during migration — edit with a real date of birth when convenient">${uiIcon("warning", 11)} estimated DOB</span>` : ""}</div>
             </div>
           </div>
           <div class="badge-row">
@@ -811,6 +935,11 @@
               <div class="val">${score.toFixed(1)}</div>
               <div class="lbl">overall</div>
             </div>
+            ${(p.vo2max !== null && p.vo2max !== undefined) ? `
+            <div class="score-box vo2-box">
+              <div class="val">${p.vo2max}</div>
+              <div class="lbl">VO2 max</div>
+            </div>` : ""}
           </div>
           <div class="card-actions">
             <button class="btn btn-ghost btn-small" data-action="toggle" data-id="${p.id}">${expanded ? "Hide ratings" : "Rate player"}</button>
@@ -861,6 +990,15 @@
         saveState(); render();
       });
     });
+    grid.querySelectorAll(".vo2-edit").forEach(inp => {
+      inp.addEventListener("change", (e) => {
+        const id = e.target.dataset.id;
+        const p = state.players.find(pl => pl.id === id);
+        if(!p) return;
+        p.vo2max = e.target.value ? +e.target.value : null;
+        saveState(); render();
+      });
+    });
   }
 
   function updateCardLive(p){
@@ -891,7 +1029,12 @@
         <div class="m-label">Date of birth</div>
         <input type="date" class="dob-edit" data-id="${p.id}" value="${p.birthDate || ""}">
       </div>`;
-    return `<div class="metrics-panel">${dobRow}${rows}</div>`;
+    const vo2Row = `
+      <div class="metric-row">
+        <div class="m-label">VO2 max</div>
+        <input type="number" class="vo2-edit" min="10" max="90" step="0.1" placeholder="e.g. 48.5" data-id="${p.id}" value="${p.vo2max ?? ""}">
+      </div>`;
+    return `<div class="metrics-panel">${dobRow}${vo2Row}${rows}</div>`;
   }
 
   function renderTopPicks(){
@@ -911,7 +1054,7 @@
 
     if(entries.length === 0){
       grid.innerHTML = `<div class="roster-empty" style="grid-column:1/-1;">
-        <span class="glyph">🏆</span>
+        <span class="glyph">${uiIcon("trophy", 34)}</span>
         <h3>No picks yet</h3>
         <div>Rate a few players and Totem will surface the strongest choice per ${noun} and age group.</div>
       </div>`;
@@ -947,7 +1090,7 @@
       tabsEl.innerHTML = "";
       document.getElementById("sidesCoachBanner").textContent = "";
       boardEl.innerHTML = `<div class="roster-empty" style="grid-column:1/-1;">
-        <span class="glyph">🎽</span>
+        <span class="glyph">${uiIcon("jersey", 34)}</span>
         <h3>No sides yet</h3>
         <div>Add and rate a few ${escapeHtml(sport.name.toLowerCase())} players and Totem will slot them into A, B, C, D and E sides by ${noun}.</div>
       </div>`;
@@ -968,7 +1111,7 @@
     const sidesCoach = coachFor(sport.id, sidesActiveAgeGroup);
     if(sidesCoach){
       coachBanner.className = "coach-banner";
-      coachBanner.textContent = `🧑‍🏫 Head coach — ${sidesActiveAgeGroup}: ${sidesCoach.name}${sidesCoach.email ? " (" + sidesCoach.email + ")" : ""}`;
+      coachBanner.textContent = `Head coach — ${sidesActiveAgeGroup}: ${sidesCoach.name}${sidesCoach.email ? " (" + sidesCoach.email + ")" : ""}`;
     } else {
       coachBanner.className = "coach-banner empty";
       coachBanner.textContent = `No head coach assigned for ${sidesActiveAgeGroup} yet.`;
@@ -995,7 +1138,7 @@
         <div class="side-head">
           <span class="letter">${seniorLabel || (letter + " Side")}</span>
           <span class="side-name">${seniorLabel ? "" : (sideNames[letter] || "")}</span>
-          <button class="print-btn" data-action="print-team" data-sport="${sport.id}" data-group="${escapeHtml(sidesActiveAgeGroup)}" data-side="${letter}" title="Print team sheet" type="button">🖨</button>
+          <button class="print-btn" data-action="print-team" data-sport="${sport.id}" data-group="${escapeHtml(sidesActiveAgeGroup)}" data-side="${letter}" title="Print team sheet" type="button">${uiIcon("printer", 13)}</button>
         </div>
         <div class="side-body">${slots}</div>
         ${benchEditableHtml(sport.id, sidesActiveAgeGroup, letter)}
@@ -1014,7 +1157,7 @@
 
     if(boardEl.children.length === 0){
       boardEl.innerHTML = `<div class="roster-empty" style="grid-column:1/-1;">
-        <span class="glyph">🎽</span>
+        <span class="glyph">${uiIcon("jersey", 34)}</span>
         <h3>No sides yet</h3>
         <div>Rate at least one player per ${noun} in this age group to fill A side.</div>
       </div>`;
@@ -1082,10 +1225,10 @@
         return (d.getMonth() + 1) === (month + 1) && d.getDate() === day;
       });
       cell.innerHTML = `
-        <div class="cal-daynum">${day}${birthdayPlayers.length ? ` <span class="cal-birthday-flag" title="🎂 ${escapeHtml(birthdayPlayers.map(p => p.name + ' (' + ageGroupForPlayer(p) + ')').join(', '))}">🎂</span>` : ""}</div>
+        <div class="cal-daynum">${day}${birthdayPlayers.length ? ` <span class="cal-birthday-flag" title="Birthday: ${escapeHtml(birthdayPlayers.map(p => p.name + ' (' + ageGroupForPlayer(p) + ')').join(', '))}">${uiIcon("gift", 12)}</span>` : ""}</div>
         <div class="cal-chips">
           ${dayFixtures.map(f => `<button class="fixture-chip" data-id="${f.id}">${escapeHtml(f.opponent)}</button>`).join("")}
-          ${dayTrials.map(t => `<button class="fixture-chip trial-chip" data-trial-id="${t.id}">🏁 ${escapeHtml(t.name)}</button>`).join("")}
+          ${dayTrials.map(t => `<button class="fixture-chip trial-chip" data-trial-id="${t.id}">${uiIcon("flag", 11)} ${escapeHtml(t.name)}</button>`).join("")}
         </div>
         ${birthdayPlayers.length ? `<div class="cal-birthday-names">${birthdayPlayers.map(p => escapeHtml(p.name + ' (' + ageGroupForPlayer(p) + ')')).join(", ")}</div>` : ""}
       `;
@@ -1146,7 +1289,7 @@
 
     if(entries.length === 0){
       el.innerHTML = `<div class="roster-empty">
-        <span class="glyph">🗓️</span>
+        <span class="glyph">${uiIcon("calendar", 34)}</span>
         <h3>No fixtures yet</h3>
         <div>Add a fixture on the calendar above and Totem will build the best team per age group.${isIndividual ? " Booking a time trial uses the same button." : ""}</div>
       </div>`;
@@ -1161,7 +1304,7 @@
           <div class="fixture-card trial-card" id="trcard-${t.id}">
             <div class="fixture-card-main">
               <div class="fixture-date">${dateLabel}</div>
-              <div class="fixture-opp">🏁 ${escapeHtml(t.name)}</div>
+              <div class="fixture-opp">${uiIcon("flag", 14)} ${escapeHtml(t.name)}</div>
               ${t.venue ? `<div class="fixture-venue">${escapeHtml(t.venue)}</div>` : ""}
               <div class="fixture-groups">${t.ageGroups.map(g => trialEntryChip(t, g)).join("")}</div>
             </div>
@@ -1275,7 +1418,7 @@
 
       el.innerHTML = `
         <div class="section-title">
-          <h2>🏁 ${escapeHtml(t.name)}</h2>
+          <h2>${uiIcon("flag", 18)} ${escapeHtml(t.name)}</h2>
           <span class="sub">${dateLabel}${t.venue ? " · " + escapeHtml(t.venue) : ""}</span>
         </div>
         <div class="sides-board">${groupsHtml}</div>
@@ -1309,7 +1452,7 @@
           <div class="side-head">
             <span class="letter">${seniorLabel || (escapeHtml(group) + " · " + side)}</span>
             <span class="side-name">${groupCoach ? "Coach: " + escapeHtml(groupCoach.name) : "Best available team"}</span>
-            <button class="print-btn" data-action="print-team" data-sport="${sport.id}" data-group="${escapeHtml(group)}" data-side="${side}" title="Print team sheet" type="button">🖨</button>
+            <button class="print-btn" data-action="print-team" data-sport="${sport.id}" data-group="${escapeHtml(group)}" data-side="${side}" title="Print team sheet" type="button">${uiIcon("printer", 13)}</button>
           </div>
           <div class="side-body">${hasAny ? slots : `<div class="roster-empty" style="padding:24px 14px;"><div>No rated players in this age group yet.</div></div>`}</div>
           ${hasAny ? benchEditableHtml(sport.id, group, side) : ""}
@@ -1473,7 +1616,7 @@
     document.getElementById("trialResultModal").classList.remove("open");
     saveState();
     renderFixtureList(); renderFixtureDetail(); renderSides();
-    showToast(`🏁 Trial results saved for ${trialResultDraft.ageGroup} — team rankings updated.`);
+    showToast(`Trial results saved for ${trialResultDraft.ageGroup} — team rankings updated.`);
   });
 
   // ---------- results ----------
@@ -1773,7 +1916,7 @@
     if(sportType(sport) !== "individual" && resultDraft.scorers.length > 0){
       const scorerTotal = resultDraft.scorers.reduce((sum, sc) => sum + (sc.goals || 0), 0);
       if(scorerTotal !== resultDraft.ourScore){
-        warningPrefix = `⚠️ Scorer goals (${scorerTotal}) don't match the score (${resultDraft.ourScore}). `;
+        warningPrefix = `Note: scorer goals (${scorerTotal}) don't match the score (${resultDraft.ourScore}). `;
       }
     }
     const fixture = state.fixtures.find(x => x.id === resultDraft.fixtureId);
@@ -1918,7 +2061,7 @@
     if(groups.length === 0){
       tabsEl.innerHTML = "";
       bodyEl.innerHTML = `<div class="roster-empty">
-        <span class="glyph">📊</span>
+        <span class="glyph">${uiIcon("barChart", 34)}</span>
         <h3>No stats yet</h3>
         <div>Add players and capture a few fixture results to see season stats here.</div>
       </div>`;
@@ -1972,7 +2115,7 @@
 
     if(rows.length === 0){
       el.innerHTML = `<div class="roster-empty">
-        <span class="glyph">🏅</span>
+        <span class="glyph">${uiIcon("medal", 34)}</span>
         <h3>No coach results yet</h3>
         <div>Once team-sport results are captured, coaches will be ranked here by win rate.</div>
       </div>`;
@@ -1986,7 +2129,7 @@
         </div>
         ${rows.map((c, i) => `
           <div class="clb-row${i === 0 ? " clb-top" : ""}">
-            <span class="clb-name">${i === 0 ? "🏆 " : ""}${escapeHtml(c.name)}<span class="clb-sub">${escapeHtml(c.assignments.join(", "))}</span></span>
+            <span class="clb-name">${i === 0 ? uiIcon("trophy", 13, "clb-trophy") + " " : ""}${escapeHtml(c.name)}<span class="clb-sub">${escapeHtml(c.assignments.join(", "))}</span></span>
             <span class="mono">${c.played}</span>
             <span class="mono">${c.won}</span>
             <span class="mono">${c.drawn}</span>
@@ -2092,10 +2235,10 @@
     try{
       const { error } = await supabaseClient.functions.invoke("send-result-email", { body: payload });
       if(error) throw error;
-      showToast(`${warningPrefix || ""}📧 ${resultLabel} result emailed to${notifyCoach ? " " + notifyCoach.email + " +" : ""} the team.`);
+      showToast(`${warningPrefix || ""}${resultLabel} result emailed to${notifyCoach ? " " + notifyCoach.email + " +" : ""} the team.`);
     }catch(e){
       console.warn("Totem: result email failed —", e);
-      showToast(`${warningPrefix || ""}⚠️ Result saved, but the notification email failed to send. Check your Edge Function is deployed.`);
+      showToast(`${warningPrefix || ""}Result saved, but the notification email failed to send. Check your Edge Function is deployed.`);
     }
   }
 
@@ -2200,6 +2343,69 @@
     renderCalendar(); renderFixtureList(); renderFixtureDetail();
   });
 
+  // ---------- sport icons ----------
+  // A curated, consistent icon exists for common sports. Anything else
+  // (a club-specific or unusual sport someone adds) automatically falls
+  // back to a clean initials badge — never an emoji, never a blank/broken icon.
+  const SPORT_ICONS = {
+    netball: '<circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18"/>',
+    hockey: '<path d="M4 20c4-10 12-10 16-16"/><circle cx="19" cy="5" r="2"/>',
+    swimming: '<path d="M3 16c2-2 4 2 6 0s4 2 6 0 4 2 6 0"/><path d="M3 12c2-2 4 2 6 0s4 2 6 0 4 2 6 0"/>',
+    athletics: '<path d="M13 3 6 15h5l-1 6 8-12h-5z"/>',
+    rugby: '<ellipse cx="12" cy="12" rx="9" ry="5.5"/><path d="M4.5 12h15M9 9.5v5M12 9v6M15 9.5v5"/>',
+    cricket: '<path d="M14 3 9 12l3 3 9-5z"/><path d="M9 12l-4.5 6.5"/><circle cx="4" cy="19.5" r="1.8"/>',
+    basketball: '<circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18M5.5 5.5c3.5 3.5 9.5 3.5 13 0M5.5 18.5c3.5-3.5 9.5-3.5 13 0"/>',
+    soccer: '<circle cx="12" cy="12" r="9"/><path d="M12 7.5 14.6 9.4 13.6 13H10.4L9.4 9.4Z"/><path d="M12 3.5v4M5 8.5l3.5 1M19 8.5l-3.5 1M8 19l1.3-3.3M16 19l-1.3-3.3"/>',
+    tennis: '<circle cx="12" cy="12" r="9"/><path d="M4 6c4 2 4 10 0 12M20 6c-4 2-4 10 0 12"/>',
+    volleyball: '<circle cx="12" cy="12" r="9"/><path d="M12 3c3 3 3 15 0 18M3.5 9c4 2 13 2 17 0M3.5 15c4-2 13-2 17 0"/>',
+    "cross-country": '<circle cx="15" cy="4.5" r="1.8"/><path d="M12 9l3 1.5 1.5 5-1.5 6M15 10.5l-4 2-2.5 5M12 9 7.5 12"/>',
+    chess: '<path d="M9 20h6M10 20v-2.5c0-1 .5-1.8 1-2.5.5.7 1 1.5 1 2.5V20"/><path d="M8.5 15c-.3-3.5 1.5-4.5 1.5-6.5 0-1-1-1-1-2C9 4.7 10.3 3 12 3s3 1.7 3 3.5c0 1-1 1-1 2 0 2 1.8 3 1.5 6.5Z"/>',
+    squash: '<ellipse cx="8.5" cy="7.5" rx="4.5" ry="5.5" transform="rotate(-25 8.5 7.5)"/><path d="M11.5 12 18 20"/><circle cx="19.2" cy="5.5" r="1.5"/>',
+    golf: '<path d="M6 21V4M6 4l9 3-9 3"/><circle cx="17" cy="18" r="2"/>',
+    rowing: '<path d="M4 20 18 6M4 6l14 14"/><circle cx="4" cy="20" r="1.3"/><circle cx="18" cy="6" r="1.3"/><circle cx="4" cy="6" r="1.3"/><circle cx="18" cy="20" r="1.3"/>',
+    "water-polo": '<path d="M3 16c2-2 4 2 6 0s4 2 6 0 4 2 6 0"/><circle cx="12" cy="9" r="4"/>'
+  };
+  const SPORT_ICON_LABELS = {
+    netball:"Netball", hockey:"Hockey", swimming:"Swimming", athletics:"Athletics",
+    rugby:"Rugby", cricket:"Cricket", basketball:"Basketball", soccer:"Soccer",
+    tennis:"Tennis", volleyball:"Volleyball", "cross-country":"Cross Country",
+    chess:"Chess", squash:"Squash", golf:"Golf", rowing:"Rowing", "water-polo":"Water Polo"
+  };
+  function sportInitials(name){
+    const words = String(name || "").trim().split(/\s+/).filter(Boolean);
+    if(words.length === 0) return "?";
+    if(words.length === 1) return words[0].slice(0, 2).toUpperCase();
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+  function sportIconHtml(sport, size){
+    const px = size || 16;
+    if(sport.iconKey && SPORT_ICONS[sport.iconKey]){
+      return `<svg class="sport-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:${px}px;height:${px}px;">${SPORT_ICONS[sport.iconKey]}</svg>`;
+    }
+    return `<span class="sport-icon-badge" style="width:${px}px;height:${px}px;font-size:${Math.max(8, px*0.42)}px;">${escapeHtml(sportInitials(sport.name))}</span>`;
+  }
+
+  // ---------- interface icons (replace every remaining emoji, same visual language as sport icons) ----------
+  const UI_ICONS = {
+    coach: '<circle cx="12" cy="8" r="3.3"/><path d="M5 20a7 7 0 0 1 14 0"/>',
+    playerPlus: '<circle cx="9" cy="8" r="3.2"/><path d="M2.8 20a6.3 6.3 0 0 1 12.4 0"/><path d="M18 8v6M15 11h6"/>',
+    trophy: '<path d="M7 4h10v4a5 5 0 0 1-10 0z"/><path d="M7 5H4.5A2.5 2.5 0 0 0 7 9.5M17 5h2.5A2.5 2.5 0 0 1 17 9.5"/><path d="M12 13v4"/><path d="M9.5 17h5l1 3H8.5z"/>',
+    jersey: '<path d="M8.5 4 4.5 7v3H7v10h10V10h2.5V7l-4-3-2.2 2h-3.6z"/>',
+    printer: '<path d="M6 9V4h12v5"/><rect x="4" y="9" width="16" height="8" rx="1.5"/><rect x="7.5" y="14" width="9" height="6"/>',
+    gift: '<rect x="4" y="10" width="16" height="10" rx="1"/><path d="M4 14h16M12 10v10"/><path d="M12 9.5c-1.6-3-5.2-2.6-5.2-.3S9 9.7 12 9.5zM12 9.5c1.6-3 5.2-2.6 5.2-.3S15 9.7 12 9.5z"/>',
+    gear: '<circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2.5 12h3M18.5 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/>',
+    calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>',
+    barChart: '<path d="M4 20V11M10 20V4M16 20v-6M3 20h18"/>',
+    medal: '<circle cx="12" cy="15" r="5"/><path d="m9 11-3-8M15 11l3-8M6 3h3l3 4.5L15 3h3"/>',
+    envelope: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 6.5 8 6.5 8-6.5"/>',
+    flag: '<path d="M5 3v18"/><path d="M5 4c2-1 4-1 6 0s4 1 6 0v8c-2 1-4 1-6 0s-4-1-6 0z"/>',
+    warning: '<path d="M12 3.5 21.5 20h-19z"/><path d="M12 9.5v4.2M12 17h.01"/>'
+  };
+  function uiIcon(key, size, extraClass){
+    const px = size || 16;
+    return `<svg class="ui-icon${extraClass ? " " + extraClass : ""}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:${px}px;height:${px}px;">${UI_ICONS[key] || ""}</svg>`;
+  }
+
   function escapeHtml(str){
     return String(str).replace(/[&<>"']/g, ch => ({
       "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;"
@@ -2227,11 +2433,13 @@
   document.getElementById("btnAddPlayer").addEventListener("click", () => {
     const nameInp = document.getElementById("inName");
     const dobInp = document.getElementById("inDob");
+    const vo2Inp = document.getElementById("inVo2max");
     const sport = currentSport();
     const isIndividual = sportType(sport) === "individual";
     const name = nameInp.value.trim();
     const birthDate = dobInp.value;
     const turning = turningAgeFromBirthDate(birthDate);
+    const vo2max = vo2Inp.value ? +vo2Inp.value : null;
 
     let positions;
     if(isIndividual){
@@ -2251,10 +2459,10 @@
     state.players.push({
       id: uid(),
       sportId: state.activeSport,
-      name, birthDate, positions,
+      name, birthDate, positions, vo2max,
       metrics
     });
-    nameInp.value = ""; dobInp.value = "";
+    nameInp.value = ""; dobInp.value = ""; vo2Inp.value = "";
     document.querySelectorAll("#inPositionsMulti input:checked").forEach(i => i.checked = false);
     document.getElementById("inPositionsMulti").classList.remove("open");
     updateEventsToggleLabel();
@@ -2315,6 +2523,23 @@
     saveState(); render();
   });
 
+  let selectedNewSportIcon = null;
+  function renderIconPicker(){
+    const wrap = document.getElementById("newSportIconPicker");
+    wrap.innerHTML = Object.keys(SPORT_ICONS).map(key => `
+      <div class="icon-swatch${selectedNewSportIcon === key ? " selected" : ""}" data-icon="${key}">
+        <svg class="sport-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${SPORT_ICONS[key]}</svg>
+        <span class="label">${escapeHtml(SPORT_ICON_LABELS[key])}</span>
+      </div>
+    `).join("");
+    wrap.querySelectorAll(".icon-swatch").forEach(el => {
+      el.addEventListener("click", () => {
+        selectedNewSportIcon = selectedNewSportIcon === el.dataset.icon ? null : el.dataset.icon;
+        renderIconPicker();
+      });
+    });
+  }
+
   function openSportModal(){
     document.getElementById("sportModal").classList.add("open");
     document.getElementById("newSportName").value = "";
@@ -2322,6 +2547,8 @@
     const teamRadio = document.querySelector('input[name="newSportType"][value="team"]');
     if(teamRadio) teamRadio.checked = true;
     document.getElementById("newSportPositionsLabel").textContent = "Positions (comma separated)";
+    selectedNewSportIcon = null;
+    renderIconPicker();
   }
   document.querySelectorAll('input[name="newSportType"]').forEach(radio => {
     radio.addEventListener("change", (e) => {
@@ -2340,7 +2567,7 @@
     const id = name.toLowerCase().replace(/[^a-z0-9]+/g,"-") + "-" + uid().slice(0,4);
     const typeInput = document.querySelector('input[name="newSportType"]:checked');
     const type = typeInput ? typeInput.value : "team";
-    state.sports.push({ id, name, icon:"🏅", type, positions });
+    state.sports.push({ id, name, iconKey: selectedNewSportIcon, type, positions });
     state.activeSport = id;
     document.getElementById("sportModal").classList.remove("open");
     saveState(); render();

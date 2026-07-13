@@ -30,7 +30,27 @@ No server to manage, no build step. Updating the app is just editing files and p
 
 ---
 
-## Part 2 — Connect the app to Supabase
+## Part 1.5 — Multi-tenant migration (multiple clubs, self-service signup)
+
+Skip this section if you're only ever running Totem for a single club. Run it if you want Totem to support multiple separate clubs/schools/teams signing up on their own, each fully isolated from the others — the groundwork for eventually charging for it.
+
+1. **SQL Editor → New query.** Paste in the entire contents of `migration-multitenant.sql` and run it.
+   - This is safe to run even if you already have real data — it automatically moves your existing club's data into its own organization and keeps your current staff logins working, no re-entry needed.
+   - It adds a `plan` field (defaulting to `'free'`) to every organization, so nothing needs to change in the database again once you're ready to introduce paid tiers.
+2. **Authentication → Providers → Email → turn "Allow new users to sign up" back ON.**
+   - This was deliberately off in Part 1 for the single-club model. It's safe to turn back on now — every new signup creates (or joins) their own isolated organization, so a stranger signing up only ever gets their own empty club, never access to yours.
+3. **Authentication → Settings → turn ON "Confirm email."** Recommended now that signup is public, so people can't create an account with an email address that isn't theirs.
+
+**How signup works now, from a user's point of view:**
+- **"Create a new club"** — they type their club/school/team's name, pick an email + password, and get their own private Totem instance immediately, as the club's owner.
+- **"Join an existing club"** — they need an 8-character invite code from that club's owner. The owner finds this by clicking **Invite staff** in the app header (top right, only visible to the owner) once logged in.
+
+**Renaming a club:** the owner can also click **Rename club** in that same header spot to change their club's name any time — useful right after the migration above, since auto-migrated clubs get a generic placeholder name ("My Club") that you'll want to change to your real club name. This needs one more small migration first:
+
+1. **SQL Editor → New query**, paste in `migration-club-settings.sql`, run it. This grants club owners permission to update their own organization's name (locked down to owners only, and only their own club).
+2. That's it — the Rename Club button will work from then on, no more manual SQL needed for this.
+
+
 
 1. Open `config.js` in this package.
 2. Replace the two placeholder values with what you copied in step 7 above:
