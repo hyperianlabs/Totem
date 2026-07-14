@@ -303,7 +303,7 @@
 </div>
 
 <div class="overlay" id="renameClubModal">
-  <div class="modal">
+  <div class="modal modal-wide">
     <h3>Club settings</h3>
     <div class="field">
       <label>Club / school / team name</label>
@@ -316,6 +316,11 @@
         <label class="chip-check"><input type="radio" name="renameClubType" value="school"><span>School (multiple teams/sports)</span></label>
       </div>
       <p class="icon-picker-hint">This affects your free-plan usage allowance — schools naturally rack up more results across more teams.</p>
+    </div>
+    <div class="field">
+      <label>Staff</label>
+      <div id="staffList" class="staff-list"></div>
+      <p class="icon-picker-hint">Removing someone here revokes their access to this club's data — it doesn't delete their login entirely.</p>
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost btn-small" id="cancelRenameClub">Cancel</button>

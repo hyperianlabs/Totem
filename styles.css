@@ -597,6 +597,20 @@
 .auth-toggle button.active{background:var(--pitch); color:#fff; border-color:var(--pitch);}
 .auth-hint{font-size:11px; color:var(--slate); margin:14px 0 0; line-height:1.5; text-align:center;}
 
+.staff-list{display:flex; flex-direction:column; gap:6px; max-height:200px; overflow-y:auto;}
+.staff-row{
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:8px 10px; border:1px solid var(--line); border-radius:7px; background:var(--chalk);
+}
+.staff-row .staff-email{font-size:13px; font-weight:600;}
+.staff-row .staff-role{font-size:10px; text-transform:uppercase; letter-spacing:0.04em; color:var(--slate); margin-left:6px;}
+.staff-row button{
+  background:transparent; color:var(--clay); border:1px solid transparent; font-size:12px; font-weight:700;
+  cursor:pointer; padding:4px 8px;
+}
+.staff-row button:hover{text-decoration:underline;}
+.staff-row.is-self button{visibility:hidden;}
+
 .header-account{
   position:absolute; top:20px; right:28px; z-index:2;
   display:flex; align-items:center; gap:10px; font-size:12px; color:#CFE3D6;

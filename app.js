@@ -233,7 +233,43 @@
     const typeRadio = document.querySelector(`input[name="renameClubType"][value="${currentOrgType || "club"}"]`);
     if(typeRadio) typeRadio.checked = true;
     document.getElementById("renameClubModal").classList.add("open");
+    loadStaffList();
   });
+  async function loadStaffList(){
+    const listEl = document.getElementById("staffList");
+    listEl.innerHTML = `<div style="font-size:12px; color:var(--slate);">Loading…</div>`;
+    const { data, error } = await supabaseClient
+      .from("team_members")
+      .select("id, email, role")
+      .eq("org_id", currentOrgId);
+    if(error){
+      listEl.innerHTML = `<div style="font-size:12px; color:var(--clay);">Could not load staff list.</div>`;
+      return;
+    }
+    const owners = data.filter(m => m.role === "owner").length;
+    listEl.innerHTML = data.map(m => {
+      const isSelf = m.id === currentUser.id;
+      const isLastOwner = m.role === "owner" && owners <= 1;
+      return `
+        <div class="staff-row${isSelf ? " is-self" : ""}">
+          <span><span class="staff-email">${escapeHtml(m.email || "(no email)")}</span><span class="staff-role">${escapeHtml(m.role)}</span></span>
+          <button type="button" data-remove-staff="${m.id}" data-email="${escapeHtml(m.email || "")}" ${isSelf || isLastOwner ? "disabled title=\"" + (isSelf ? "That's you" : "A club needs at least one owner") + "\"" : ""}>Remove</button>
+        </div>`;
+    }).join("");
+    listEl.querySelectorAll("[data-remove-staff]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        if(btn.disabled) return;
+        const email = btn.dataset.email;
+        if(!confirm(`Remove ${email} from ${currentOrgName || "this club"}? They'll lose access to this club's data immediately — this doesn't delete their login itself.`)) return;
+        const { error } = await supabaseClient
+          .from("team_members")
+          .delete()
+          .eq("id", btn.dataset.removeStaff);
+        if(error){ alert("Could not remove that person — " + error.message); return; }
+        loadStaffList();
+      });
+    });
+  }
   document.getElementById("cancelRenameClub").addEventListener("click", () => {
     document.getElementById("renameClubModal").classList.remove("open");
   });
@@ -2310,7 +2346,7 @@
     win.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(title)}</title>
       <style>
         body{font-family:Arial,Helvetica,sans-serif; padding:32px; color:#14201A;}
-        .print-logo{height:36px; margin-bottom:16px; display:block;}
+        .print-logo{width:200px; height:auto; display:block; margin:0 auto 22px; padding-bottom:18px; border-bottom:2px solid #14201A;}
         h1{font-size:22px; margin:0 0 2px;}
         .sub{color:#5B6B63; font-size:13px; margin-bottom:6px;}
         .coach-line{color:#14201A; font-size:13px; font-weight:700; margin-bottom:18px;}
@@ -2387,7 +2423,7 @@
     win.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(sport.name)} — ${escapeHtml(label)} result</title>
       <style>
         body{font-family:Arial,Helvetica,sans-serif; padding:32px; color:#14201A;}
-        .print-logo{height:36px; margin-bottom:16px; display:block;}
+        .print-logo{width:200px; height:auto; display:block; margin:0 auto 22px; padding-bottom:18px; border-bottom:2px solid #14201A;}
         h1{font-size:22px; margin:0 0 2px;}
         .sub{color:#5B6B63; font-size:13px; margin-bottom:6px;}
         .coach-line{font-size:13px; font-weight:700; margin-bottom:18px;}
@@ -2483,7 +2519,7 @@
     win.document.write(`<!DOCTYPE html><html><head><title>${escapeHtml(sport.name)} — ${escapeHtml(group)} season summary</title>
       <style>
         body{font-family:Arial,Helvetica,sans-serif; padding:32px; color:#14201A;}
-        .print-logo{height:36px; margin-bottom:16px; display:block;}
+        .print-logo{width:200px; height:auto; display:block; margin:0 auto 22px; padding-bottom:18px; border-bottom:2px solid #14201A;}
         h1{font-size:22px; margin:0 0 2px;}
         h2{font-size:15px; margin:26px 0 8px;}
         .sub{color:#5B6B63; font-size:13px; margin-bottom:6px;}

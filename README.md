@@ -45,6 +45,8 @@ Skip this section if you're only ever running Totem for a single club. Run it if
 - **"Create a new club"** — they type their club/school/team's name, pick an email + password, and get their own private Totem instance immediately, as the club's owner.
 - **"Join an existing club"** — they need an 8-character invite code from that club's owner. The owner finds this by clicking **Invite staff** in the app header (top right, only visible to the owner) once logged in.
 
+**Removing staff:** run `migration-staff-management.sql` once (SQL Editor → New query → Run) to enable this — it lets an owner see and remove people from **Club settings → Staff**. This only revokes their access to your club's data; it doesn't delete their login entirely (that still needs Authentication → Users → delete, if you want the email address freed up for reuse elsewhere). Built-in safeguards: you can't remove yourself, and a club can't be left with zero owners.
+
 **Renaming a club:** the owner can also click **Rename club** in that same header spot to change their club's name any time — useful right after the migration above, since auto-migrated clubs get a generic placeholder name ("My Club") that you'll want to change to your real club name. This needs one more small migration first:
 
 1. **SQL Editor → New query**, paste in `migration-club-settings.sql`, run it. This grants club owners permission to update their own organization's name (locked down to owners only, and only their own club).
