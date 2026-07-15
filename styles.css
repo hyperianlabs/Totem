@@ -596,6 +596,10 @@
 }
 .auth-toggle button.active{background:var(--pitch); color:#fff; border-color:var(--pitch);}
 .auth-hint{font-size:11px; color:var(--slate); margin:14px 0 0; line-height:1.5; text-align:center;}
+.consent-check{display:flex; align-items:flex-start; gap:9px; cursor:pointer;}
+.consent-check input{margin-top:3px; flex-shrink:0;}
+.consent-check span{font-size:11px; color:var(--slate); line-height:1.5;}
+.consent-check a{color:var(--pitch); font-weight:600;}
 
 .staff-list{display:flex; flex-direction:column; gap:6px; max-height:200px; overflow-y:auto;}
 .staff-row{
@@ -610,6 +614,11 @@
 }
 .staff-row button:hover{text-decoration:underline;}
 .staff-row.is-self button{visibility:hidden;}
+.consent-status-box{
+  font-size:12px; padding:9px 12px; border-radius:7px; font-weight:600;
+}
+.consent-status-box.confirmed{background:#EAF3EE; color:var(--pitch-deep); border:1px solid #CFE3D6;}
+.consent-status-box.unconfirmed{background:#FBE9E4; color:var(--clay); border:1px solid #F0C4B6;}
 
 .header-account{
   position:absolute; top:20px; right:28px; z-index:2;

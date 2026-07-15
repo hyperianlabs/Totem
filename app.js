@@ -13,6 +13,8 @@
   let currentOrgPlan = "free";
   let currentOrgCreatedAt = null;
   let currentOrgType = "club";
+  let currentOrgConsentConfirmed = false;
+  let currentOrgConsentDate = null;
   // Free-plan limits. Sports is the real, intentional business lever —
   // players is left generous (not a serious constraint) purely as an
   // anti-abuse ceiling, since schools can genuinely have hundreds of
@@ -133,7 +135,7 @@
   async function resolveOrgAndEnter(user){
     const { data, error } = await supabaseClient
       .from("team_members")
-      .select("org_id, role, organizations(name, plan, created_at, org_type)")
+      .select("org_id, role, organizations(name, plan, created_at, org_type, consent_attestation_confirmed, consent_attestation_date)")
       .eq("id", user.id)
       .single();
     if(error || !data || !data.org_id){
@@ -148,6 +150,8 @@
     currentOrgPlan = data.organizations ? data.organizations.plan : "free";
     currentOrgCreatedAt = data.organizations ? data.organizations.created_at : null;
     currentOrgType = data.organizations ? data.organizations.org_type : "club";
+    currentOrgConsentConfirmed = data.organizations ? data.organizations.consent_attestation_confirmed : false;
+    currentOrgConsentDate = data.organizations ? data.organizations.consent_attestation_date : null;
     document.getElementById("btnInviteStaff").style.display = currentUserRole === "owner" ? "" : "none";
     document.getElementById("btnRenameClub").style.display = currentUserRole === "owner" ? "" : "none";
     showApp(user, currentOrgName);
@@ -160,6 +164,7 @@
     document.getElementById("signupTypeField").style.display = isSignup ? "" : "none";
     document.getElementById("orgNameField").style.display = (isSignup && signupType === "create") ? "" : "none";
     document.getElementById("orgTypeField").style.display = (isSignup && signupType === "create") ? "" : "none";
+    document.getElementById("consentField").style.display = (isSignup && signupType === "create") ? "" : "none";
     document.getElementById("inviteCodeField").style.display = (isSignup && signupType === "join") ? "" : "none";
     document.getElementById("btnLogin").textContent = isSignup ? "Sign up" : "Log in";
     document.getElementById("authTagline").textContent = isSignup ? "Set up your club's account" : "Sign in to your club account";
@@ -174,6 +179,7 @@
     document.querySelectorAll(".auth-toggle button[data-signup-type]").forEach(b => b.classList.toggle("active", b.dataset.signupType === type));
     document.getElementById("orgNameField").style.display = type === "create" ? "" : "none";
     document.getElementById("orgTypeField").style.display = type === "create" ? "" : "none";
+    document.getElementById("consentField").style.display = type === "create" ? "" : "none";
     document.getElementById("inviteCodeField").style.display = type === "join" ? "" : "none";
   }
   document.querySelectorAll(".auth-toggle button[data-mode]").forEach(b => b.addEventListener("click", () => setAuthMode(b.dataset.mode)));
@@ -191,12 +197,14 @@
       const inviteCode = document.getElementById("authInviteCode").value.trim();
       const orgTypeInput = document.querySelector('input[name="authOrgType"]:checked');
       const orgType = orgTypeInput ? orgTypeInput.value : "club";
+      const consentChecked = document.getElementById("authConsentCheck").checked;
       if(signupType === "create" && !orgName){ authError("Enter your club, school, or team's name."); return; }
+      if(signupType === "create" && !consentChecked){ authError("Please confirm the consent statement before creating your club."); return; }
       if(signupType === "join" && !inviteCode){ authError("Enter the invite code your club admin gave you."); return; }
 
       const { data, error } = await supabaseClient.auth.signUp({
         email, password,
-        options: { data: signupType === "create" ? { org_name: orgName, org_type: orgType } : { invite_code: inviteCode } }
+        options: { data: signupType === "create" ? { org_name: orgName, org_type: orgType, consent_attestation: String(consentChecked) } : { invite_code: inviteCode } }
       });
       if(error){ authError(error.message); return; }
       if(data.user && !data.session){
@@ -234,7 +242,21 @@
     if(typeRadio) typeRadio.checked = true;
     document.getElementById("renameClubModal").classList.add("open");
     loadStaffList();
+    renderConsentStatus();
   });
+  function renderConsentStatus(){
+    const box = document.getElementById("consentStatusBox");
+    const check = document.getElementById("renameClubConsentCheck");
+    check.checked = !!currentOrgConsentConfirmed;
+    if(currentOrgConsentConfirmed){
+      const dateLabel = currentOrgConsentDate ? new Date(currentOrgConsentDate).toLocaleDateString() : "unknown date";
+      box.className = "consent-status-box confirmed";
+      box.textContent = `Consent process confirmed on ${dateLabel}.`;
+    } else {
+      box.className = "consent-status-box unconfirmed";
+      box.textContent = "Not yet confirmed — please review before going live with real player data.";
+    }
+  }
   async function loadStaffList(){
     const listEl = document.getElementById("staffList");
     listEl.innerHTML = `<div style="font-size:12px; color:var(--slate);">Loading…</div>`;
@@ -281,13 +303,18 @@
     if(!newName){ alert("Enter a club name."); return; }
     const typeInput = document.querySelector('input[name="renameClubType"]:checked');
     const newType = typeInput ? typeInput.value : "club";
+    const consentChecked = document.getElementById("renameClubConsentCheck").checked;
+    const update = { name: newName, org_type: newType, consent_attestation_confirmed: consentChecked };
+    if(consentChecked) update.consent_attestation_date = new Date().toISOString();
     const { error } = await supabaseClient
       .from("organizations")
-      .update({ name: newName, org_type: newType })
+      .update(update)
       .eq("id", currentOrgId);
     if(error){ alert("Could not save your club settings — " + error.message); return; }
     currentOrgName = newName;
     currentOrgType = newType;
+    currentOrgConsentConfirmed = consentChecked;
+    if(consentChecked) currentOrgConsentDate = update.consent_attestation_date;
     const badge = document.getElementById("orgBadge");
     badge.textContent = newName;
     badge.style.display = "";

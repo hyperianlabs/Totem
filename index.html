@@ -41,6 +41,12 @@
         <label class="chip-check"><input type="radio" name="authOrgType" value="school"><span>School (multiple teams/sports)</span></label>
       </div>
     </div>
+    <div class="field consent-field" id="consentField" style="display:none;">
+      <label class="consent-check">
+        <input type="checkbox" id="authConsentCheck">
+        <span>I confirm that we have, or will put in place, a process for obtaining parental/guardian consent before entering any child's information into Totem, in line with South Africa's POPIA. See our <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a> and <a href="parental-consent-form-template.docx" target="_blank" rel="noopener">consent form template</a>.</span>
+      </label>
+    </div>
     <div class="field" id="inviteCodeField" style="display:none;">
       <label>Invite code</label>
       <input type="text" id="authInviteCode" placeholder="8-character code from your club admin">
@@ -321,6 +327,14 @@
       <label>Staff</label>
       <div id="staffList" class="staff-list"></div>
       <p class="icon-picker-hint">Removing someone here revokes their access to this club's data — it doesn't delete their login entirely.</p>
+    </div>
+    <div class="field">
+      <label>Data &amp; privacy</label>
+      <div class="consent-status-box" id="consentStatusBox"></div>
+      <label class="consent-check" style="margin-top:8px;">
+        <input type="checkbox" id="renameClubConsentCheck">
+        <span>We have, or will put in place, a process for obtaining parental/guardian consent before entering a child's information into Totem. See our <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a> and <a href="parental-consent-form-template.docx" target="_blank" rel="noopener">consent form template</a>.</span>
+      </label>
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost btn-small" id="cancelRenameClub">Cancel</button>

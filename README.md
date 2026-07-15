@@ -47,6 +47,20 @@ Skip this section if you're only ever running Totem for a single club. Run it if
 
 **Removing staff:** run `migration-staff-management.sql` once (SQL Editor → New query → Run) to enable this — it lets an owner see and remove people from **Club settings → Staff**. This only revokes their access to your club's data; it doesn't delete their login entirely (that still needs Authentication → Users → delete, if you want the email address freed up for reuse elsewhere). Built-in safeguards: you can't remove yourself, and a club can't be left with zero owners.
 
+## Part 7 — POPIA groundwork (South African data protection law)
+
+**This is technical scaffolding, not legal compliance on its own — read the caveat below before treating this as "done."**
+
+Because players (and their parents/guardians) never log into Totem themselves, consent has to be gathered by each Organization through their own enrollment process, outside the software. What's built here supports that:
+
+1. Run `migration-popia-consent.sql` once — adds a consent attestation record to each organization.
+2. **New signups** ("Create a new club") now require checking a box confirming the club has, or will put in place, a parental/guardian consent process — timestamped automatically.
+3. **`privacy.html`** — a draft Privacy Policy, linked from the signup screen. It has several `[bracketed placeholders]` that need real answers (your registered entity name, data retention period, contact email, Information Officer details, confirmed Supabase hosting region) — **do not publish this as final without a lawyer reviewing it,** it says so at the top of the page itself.
+4. **`parental-consent-form-template.docx`** — a ready-to-use, printable consent form a club can hand out at enrollment/tryouts and keep on file themselves (Totem doesn't store signed copies — that's intentionally outside the software, since it's paper the club administers). Also linked from the signup screen.
+5. **Club Settings → Data & privacy** — shows the attestation status/date, and lets a club re-confirm at any time.
+
+**Before September 15, get a real South African lawyer or POPIA consultant to review this properly** — specifically: whether the consent language is legally sufficient, whether your club's situation might qualify for a different Section 35 exception instead of consent, whether your Supabase hosting region (currently the EU) needs specific cross-border-transfer handling for children's data, and Information Officer registration. This groundwork makes that conversation easier to have, it doesn't replace it.
+
 **Renaming a club:** the owner can also click **Rename club** in that same header spot to change their club's name any time — useful right after the migration above, since auto-migrated clubs get a generic placeholder name ("My Club") that you'll want to change to your real club name. This needs one more small migration first:
 
 1. **SQL Editor → New query**, paste in `migration-club-settings.sql`, run it. This grants club owners permission to update their own organization's name (locked down to owners only, and only their own club).
