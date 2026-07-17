@@ -2659,7 +2659,7 @@
           <div class="chip-check-row">
             ${SIDE_LETTERS.map(side => `
               <label class="chip-check">
-                <input type="checkbox" data-group="${g}" data-side="${side}" ${side === "A" ? "checked" : ""}>
+                <input type="checkbox" data-group="${g}" data-side="${side}">
                 <span>${seniorSideLabel(sport, g, side) || side}</span>
               </label>
             `).join("")}
