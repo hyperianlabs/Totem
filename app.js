@@ -1418,13 +1418,27 @@
         const d = new Date(p.birthDate + "T00:00:00");
         return (d.getMonth() + 1) === (month + 1) && d.getDate() === day;
       });
+      const allDayItems = [
+        ...dayFixtures.map(f => ({ type: "fixture", data: f })),
+        ...dayTrials.map(t => ({ type: "trial", data: t }))
+      ];
+      const chipsToShow = allDayItems.length > 3 ? allDayItems.slice(0, 3) : allDayItems;
+      const extraCount = allDayItems.length - chipsToShow.length;
+      const chipsHtml = chipsToShow.map(item => {
+        if(item.type === "fixture") return `<button class="fixture-chip" data-id="${item.data.id}">${escapeHtml(item.data.opponent)}</button>`;
+        return `<button class="fixture-chip trial-chip" data-trial-id="${item.data.id}">${uiIcon("flag", 11)} ${escapeHtml(item.data.name)}</button>`;
+      }).join("") + (extraCount > 0 ? `<div class="cal-more">+${extraCount} more</div>` : "");
+
+      const birthdayNamesHtml = birthdayPlayers.length > 3
+        ? `<div class="cal-birthday-names">${birthdayPlayers.length} birthdays</div>`
+        : (birthdayPlayers.length ? `<div class="cal-birthday-names">${birthdayPlayers.map(p => escapeHtml(p.name + ' (' + ageGroupForPlayer(p) + ')')).join(", ")}</div>` : "");
+
       cell.innerHTML = `
         <div class="cal-daynum">${day}${birthdayPlayers.length ? ` <span class="cal-birthday-flag" title="Birthday: ${escapeHtml(birthdayPlayers.map(p => p.name + ' (' + ageGroupForPlayer(p) + ')').join(', '))}">${uiIcon("gift", 12)}</span>` : ""}</div>
         <div class="cal-chips">
-          ${dayFixtures.map(f => `<button class="fixture-chip" data-id="${f.id}">${escapeHtml(f.opponent)}</button>`).join("")}
-          ${dayTrials.map(t => `<button class="fixture-chip trial-chip" data-trial-id="${t.id}">${uiIcon("flag", 11)} ${escapeHtml(t.name)}</button>`).join("")}
+          ${chipsHtml}
         </div>
-        ${birthdayPlayers.length ? `<div class="cal-birthday-names">${birthdayPlayers.map(p => escapeHtml(p.name + ' (' + ageGroupForPlayer(p) + ')')).join(", ")}</div>` : ""}
+        ${birthdayNamesHtml}
       `;
       cell.addEventListener("click", (e) => {
         if(e.target.closest(".fixture-chip")) return;

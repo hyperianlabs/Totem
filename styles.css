@@ -370,6 +370,7 @@
   }
   .fixture-chip:hover{background:var(--pitch-light);}
   .fixture-chip.trial-chip{background:var(--gold-deep);}
+  .cal-more{font-size:9px; font-weight:700; color:var(--slate); padding:2px 4px;}
   .fixture-chip.trial-chip:hover{background:var(--gold);}
 
   .fixture-list{display:flex; flex-direction:column; gap:10px; margin-top:14px;}
