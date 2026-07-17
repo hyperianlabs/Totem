@@ -405,6 +405,8 @@
   let sidesActiveAgeGroup = null;
   let calendarDate = new Date();
   let openFixtureId = null;
+  let editingFixtureId = null;
+  let editingTrialId = null;
   let dashboardAgeGroup = null;
   let resultDraft = null;
 
@@ -1466,26 +1468,6 @@
     });
   }
 
-  function fixtureEntryChip(sport, f, entry){
-    const result = resultFor(f.id, entry.ageGroup, entry.side);
-    const entryLabel = seniorSideLabel(sport, entry.ageGroup, entry.side) || `${entry.ageGroup} ${entry.side}`;
-    let label, cls;
-    if(!result){
-      label = `${entryLabel} · Add result`;
-      cls = "fx-chip pending";
-    } else if(sportType(sport) === "individual"){
-      const count = (result.entries || []).length;
-      label = `${entryLabel} · ${count} logged`;
-      cls = "fx-chip done";
-    } else {
-      const outcome = result.ourScore > result.theirScore ? "win" : result.ourScore < result.theirScore ? "loss" : "draw";
-      const short = outcome === "win" ? "W" : outcome === "loss" ? "L" : "D";
-      label = `${entryLabel} · ${short} ${result.ourScore}–${result.theirScore}`;
-      cls = `fx-chip done outcome-${outcome}`;
-    }
-    return `<button class="${cls}" data-fixture="${f.id}" data-group="${escapeHtml(entry.ageGroup)}" data-side="${entry.side}" type="button">${escapeHtml(label)}</button>`;
-  }
-
   function renderFixtureList(){
     const sport = currentSport();
     const isIndividual = sportType(sport) === "individual";
@@ -1514,10 +1496,10 @@
               <div class="fixture-date">${dateLabel}</div>
               <div class="fixture-opp">${uiIcon("flag", 14)} ${escapeHtml(t.name)}</div>
               ${t.venue ? `<div class="fixture-venue">${venueLineHtml(t.venue, false)}</div>` : ""}
-              <div class="fixture-groups">${t.ageGroups.map(g => trialEntryChip(t, g)).join("")}</div>
             </div>
             <div class="fixture-card-actions">
               <button class="btn btn-ghost btn-small" data-action="view-trial" data-id="${t.id}">${openTrialId === t.id ? "Hide results" : "View results"}</button>
+              <button class="btn btn-ghost btn-small" data-action="edit-trial" data-id="${t.id}">Edit</button>
               <button class="btn btn-danger btn-small" data-action="delete-trial" data-id="${t.id}">Remove</button>
             </div>
           </div>
@@ -1530,10 +1512,10 @@
             <div class="fixture-date">${dateLabel}</div>
             <div class="fixture-opp">vs ${escapeHtml(f.opponent)}</div>
             ${f.venue ? `<div class="fixture-venue">${venueLineHtml(f.venue, false)}</div>` : ""}
-            <div class="fixture-groups">${f.entries.map(en => fixtureEntryChip(sport, f, en)).join("")}</div>
           </div>
           <div class="fixture-card-actions">
             <button class="btn btn-ghost btn-small" data-action="view-fixture" data-id="${f.id}">${openFixtureId === f.id ? "Hide teams" : "View teams"}</button>
+            <button class="btn btn-ghost btn-small" data-action="edit-fixture" data-id="${f.id}">Edit</button>
             <button class="btn btn-danger btn-small" data-action="delete-fixture" data-id="${f.id}">Remove</button>
           </div>
         </div>
@@ -1566,6 +1548,13 @@
         }
       });
     });
+    el.querySelectorAll('[data-action="edit-fixture"]').forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const f = state.fixtures.find(x => x.id === btn.dataset.id);
+        if(f) openAddFixtureModal(f, "fixture");
+      });
+    });
     el.querySelectorAll('[data-action="view-trial"]').forEach(btn => {
       btn.addEventListener("click", (e) => {
         const id = e.target.dataset.id;
@@ -1585,6 +1574,13 @@
           saveState();
           renderCalendar(); renderFixtureList(); renderFixtureDetail(); renderSides();
         }
+      });
+    });
+    el.querySelectorAll('[data-action="edit-trial"]').forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const t = state.trials.find(x => x.id === btn.dataset.id);
+        if(t) openAddFixtureModal(t, "trial");
       });
     });
   }
@@ -1733,14 +1729,6 @@
       });
     return best;
   }
-  function trialEntryChip(t, group){
-    const result = trialResultFor(t.id, group);
-    const count = result ? (result.entries || []).length : 0;
-    const label = count ? `${group} · ${count} logged` : `${group} · Add results`;
-    const cls = count ? "fx-chip done" : "fx-chip pending";
-    return `<button class="${cls}" data-trial="${t.id}" data-group="${escapeHtml(group)}" type="button">${escapeHtml(label)}</button>`;
-  }
-
   function syncTrialDraftFromDom(){
     const rows = document.querySelectorAll("#trialResultEntries .result-row");
     trialResultDraft.entries = Array.from(rows).map(row => ({
@@ -2648,7 +2636,7 @@
     if(type === "trial"){
       wrap.innerHTML = groups.map(g => `
         <label class="chip-check">
-          <input type="checkbox" data-group="${g}" checked>
+          <input type="checkbox" data-group="${g}">
           <span>${g}</span>
         </label>
       `).join("");
@@ -2678,19 +2666,44 @@
     renderFxAgeGroupsGrid(sport, type);
   }
 
-  function openAddFixtureModal(prefillDate){
+  function openAddFixtureModal(prefillDateOrItem, editType){
     const sport = currentSport();
     const isIndividual = sportType(sport) === "individual";
-    document.getElementById("fxDate").value = prefillDate || isoDate(new Date());
-    document.getElementById("fxOpponent").value = "";
-    document.getElementById("fxVenue").value = "";
-    document.getElementById("fxVenueAddress").value = "";
+    const isEdit = editType === "fixture" || editType === "trial";
+    editingFixtureId = editType === "fixture" ? prefillDateOrItem.id : null;
+    editingTrialId = editType === "trial" ? prefillDateOrItem.id : null;
+    const item = isEdit ? prefillDateOrItem : null;
+
+    document.getElementById("fxDate").value = item ? item.date : (typeof prefillDateOrItem === "string" ? prefillDateOrItem : isoDate(new Date()));
+    document.getElementById("fxOpponent").value = item ? (editType === "trial" ? item.name : item.opponent) : "";
+    document.getElementById("fxVenue").value = item ? (item.venue || "") : "";
+    document.getElementById("fxVenueAddress").value = item ? (venueAddressFor(item.venue) || "") : "";
     populateVenueDatalist();
 
     document.getElementById("fxTypeField").style.display = isIndividual ? "" : "none";
-    const matchRadio = document.querySelector('input[name="fxType"][value="match"]');
-    if(matchRadio) matchRadio.checked = true;
-    updateFixtureModalForType(sport, "match");
+    const wantType = editType === "trial" ? "trial" : "match";
+    const typeRadio = document.querySelector(`input[name="fxType"][value="${wantType}"]`);
+    if(typeRadio) typeRadio.checked = true;
+    updateFixtureModalForType(sport, wantType);
+
+    if(item){
+      if(editType === "trial"){
+        (item.ageGroups || []).forEach(g => {
+          const cb = document.querySelector(`#fxAgeGroups input[data-group="${CSS.escape(g)}"]`);
+          if(cb) cb.checked = true;
+        });
+      } else {
+        (item.entries || []).forEach(en => {
+          const cb = document.querySelector(`#fxAgeGroups input[data-group="${CSS.escape(en.ageGroup)}"][data-side="${en.side}"]`);
+          if(cb) cb.checked = true;
+        });
+      }
+    }
+
+    document.getElementById("fixtureModalTitle").textContent = isEdit
+      ? (editType === "trial" ? "Edit trial" : "Edit fixture")
+      : (wantType === "trial" ? "Add a trial" : "Add a fixture");
+    document.getElementById("confirmFixture").textContent = isEdit ? "Save changes" : (wantType === "trial" ? "Save trial" : "Save fixture");
 
     document.getElementById("fixtureModal").classList.add("open");
   }
@@ -2709,8 +2722,16 @@
   });
   document.getElementById("calPrev").addEventListener("click", () => { calendarDate.setMonth(calendarDate.getMonth()-1); renderCalendar(); });
   document.getElementById("calNext").addEventListener("click", () => { calendarDate.setMonth(calendarDate.getMonth()+1); renderCalendar(); });
-  document.getElementById("cancelFixture").addEventListener("click", () => document.getElementById("fixtureModal").classList.remove("open"));
-  document.getElementById("fixtureModal").addEventListener("click", (e) => { if(e.target.id === "fixtureModal") document.getElementById("fixtureModal").classList.remove("open"); });
+  document.getElementById("cancelFixture").addEventListener("click", () => {
+    editingFixtureId = null; editingTrialId = null;
+    document.getElementById("fixtureModal").classList.remove("open");
+  });
+  document.getElementById("fixtureModal").addEventListener("click", (e) => {
+    if(e.target.id === "fixtureModal"){
+      editingFixtureId = null; editingTrialId = null;
+      document.getElementById("fixtureModal").classList.remove("open");
+    }
+  });
   document.getElementById("confirmFixture").addEventListener("click", () => {
     const sport = currentSport();
     const typeInput = document.querySelector('input[name="fxType"]:checked');
@@ -2727,18 +2748,54 @@
     if(type === "trial"){
       const ageGroups = Array.from(document.querySelectorAll("#fxAgeGroups input[type=checkbox]:checked")).map(cb => cb.dataset.group);
       if(ageGroups.length === 0){ alert("Select at least one age group."); return; }
-      state.trials.push({ id: uid(), sportId: sport.id, date, name: label, venue, ageGroups });
+
+      if(editingTrialId){
+        const trial = state.trials.find(t => t.id === editingTrialId);
+        if(!trial){ editingTrialId = null; return; }
+        const removedGroups = (trial.ageGroups || []).filter(g => !ageGroups.includes(g));
+        const groupsWithResults = removedGroups.filter(g => trialResultFor(editingTrialId, g));
+        if(groupsWithResults.length > 0){
+          const plural = groupsWithResults.length > 1;
+          const ok = confirm(`${groupsWithResults.join(", ")} already ${plural ? "have" : "has a"} result captured. Removing ${plural ? "them" : "it"} from this trial will also delete ${plural ? "those results" : "that result"}. Continue?`);
+          if(!ok) return;
+          state.trialResults = state.trialResults.filter(r => !(r.trialId === editingTrialId && groupsWithResults.includes(r.ageGroup)));
+        }
+        trial.date = date; trial.name = label; trial.venue = venue; trial.ageGroups = ageGroups;
+      } else {
+        state.trials.push({ id: uid(), sportId: sport.id, date, name: label, venue, ageGroups });
+      }
     } else {
       const entries = Array.from(document.querySelectorAll("#fxAgeGroups input[type=checkbox]:checked"))
         .filter(cb => cb.dataset.side)
         .map(cb => ({ ageGroup: cb.dataset.group, side: cb.dataset.side }));
       if(entries.length === 0){ alert("Select at least one age group and side."); return; }
-      state.fixtures.push({ id: uid(), sportId: sport.id, date, opponent: label, venue, entries });
+
+      if(editingFixtureId){
+        const fixture = state.fixtures.find(f => f.id === editingFixtureId);
+        if(!fixture){ editingFixtureId = null; return; }
+        const stillIncluded = (en) => entries.some(e => e.ageGroup === en.ageGroup && e.side === en.side);
+        const removedEntries = (fixture.entries || []).filter(en => !stillIncluded(en));
+        const entriesWithResults = removedEntries.filter(en => resultFor(editingFixtureId, en.ageGroup, en.side));
+        if(entriesWithResults.length > 0){
+          const fixtureSport = state.sports.find(s => s.id === fixture.sportId);
+          const labels = entriesWithResults.map(en => seniorSideLabel(fixtureSport, en.ageGroup, en.side) || `${en.ageGroup} ${en.side}`);
+          const plural = labels.length > 1;
+          const ok = confirm(`${labels.join(", ")} already ${plural ? "have" : "has a"} result captured. Removing ${plural ? "them" : "it"} from this fixture will also delete ${plural ? "those results" : "that result"}. Continue?`);
+          if(!ok) return;
+          entriesWithResults.forEach(en => {
+            state.results = state.results.filter(r => !(r.fixtureId === editingFixtureId && groupsMatch(r.ageGroup, en.ageGroup) && r.side === en.side));
+          });
+        }
+        fixture.date = date; fixture.opponent = label; fixture.venue = venue; fixture.entries = entries;
+      } else {
+        state.fixtures.push({ id: uid(), sportId: sport.id, date, opponent: label, venue, entries });
+      }
     }
 
+    editingFixtureId = null; editingTrialId = null;
     document.getElementById("fixtureModal").classList.remove("open");
     saveState();
-    renderCalendar(); renderFixtureList(); renderFixtureDetail();
+    renderCalendar(); renderFixtureList(); renderFixtureDetail(); renderSides(); renderDashboard();
   });
 
   // ---------- sport icons ----------
