@@ -775,8 +775,12 @@
   function coachesForSport(sportId){
     return state.coaches.filter(c => c.sportId === sportId);
   }
-  function coachFor(sportId, group){
-    return state.coaches.find(c => c.sportId === sportId && groupsMatch(c.ageGroup, group));
+  function coachFor(sportId, group, side){
+    if(side){
+      const specific = state.coaches.find(c => c.sportId === sportId && groupsMatch(c.ageGroup, group) && c.side === side);
+      if(specific) return specific;
+    }
+    return state.coaches.find(c => c.sportId === sportId && groupsMatch(c.ageGroup, group) && !c.side);
   }
 
   // ---------- venues (name + optional address, remembered across fixtures) ----------
@@ -820,7 +824,19 @@
     const current = sel.value;
     sel.innerHTML = groups.map(g => `<option value="${g}">${g}</option>`).join("");
     sel.value = groups.includes(current) ? current : groups[0];
+    document.getElementById("inCoachSideField").style.display = sportType(sport) === "individual" ? "none" : "";
+    populateCoachSideSelect();
   }
+  function populateCoachSideSelect(){
+    const sport = currentSport();
+    const group = document.getElementById("inCoachAgeGroup").value;
+    const sideSel = document.getElementById("inCoachSide");
+    const current = sideSel.value;
+    sideSel.innerHTML = `<option value="">Head coach (all sides)</option>` +
+      SIDE_LETTERS.map(side => `<option value="${side}">${escapeHtml(seniorSideLabel(sport, group, side) || side + " side")}</option>`).join("");
+    sideSel.value = current || "";
+  }
+  document.getElementById("inCoachAgeGroup").addEventListener("change", populateCoachSideSelect);
 
   function renderCoaches(){
     const sport = currentSport();
@@ -828,28 +844,36 @@
 
     const list = coachesForSport(sport.id);
     const orderedGroups = sortAgeGroups(list.map(c => c.ageGroup));
-    list.sort((a,b) => orderedGroups.indexOf(a.ageGroup) - orderedGroups.indexOf(b.ageGroup));
+    list.sort((a,b) => {
+      const groupDiff = orderedGroups.indexOf(a.ageGroup) - orderedGroups.indexOf(b.ageGroup);
+      if(groupDiff !== 0) return groupDiff;
+      const aSide = a.side || "";
+      const bSide = b.side || "";
+      return aSide.localeCompare(bSide); // "" (head coach) sorts before "A","B",...
+    });
 
     const grid = document.getElementById("coachGrid");
 
     if(list.length === 0){
       grid.innerHTML = `<div class="roster-empty" style="grid-column:1/-1;">
         <span class="glyph">${uiIcon("coach", 34)}</span>
-        <h3>No head coaches assigned</h3>
+        <h3>No coaches assigned</h3>
         <div>Assign a head coach to each age group above so everyone knows who's leading which team.</div>
       </div>`;
       return;
     }
 
-    grid.innerHTML = list.map(c => `
+    grid.innerHTML = list.map(c => {
+      const sideLabel = c.side ? (seniorSideLabel(sport, c.ageGroup, c.side) || `${c.side} side`) : "Head Coach";
+      return `
       <div class="pick-card coach-card">
-        <div class="pos">${escapeHtml(c.ageGroup)}</div>
+        <div class="pos">${escapeHtml(c.ageGroup)} · ${escapeHtml(sideLabel)}</div>
         <div class="pname">${escapeHtml(c.name)}</div>
         <div class="page">${escapeHtml(c.email || "")}</div>
         ${c.phone ? `<div class="page">${escapeHtml(c.phone)}</div>` : ""}
         <button class="btn btn-danger btn-small" data-action="remove-coach" data-id="${c.id}" style="margin-top:10px;">Remove</button>
       </div>
-    `).join("");
+    `;}).join("");
 
     grid.querySelectorAll('[data-action="remove-coach"]').forEach(btn => {
       btn.addEventListener("click", (e) => {
@@ -867,10 +891,12 @@
   document.getElementById("btnAddCoach").addEventListener("click", () => {
     const sport = currentSport();
     const ageGroupInp = document.getElementById("inCoachAgeGroup");
+    const sideInp = document.getElementById("inCoachSide");
     const nameInp = document.getElementById("inCoachName");
     const emailInp = document.getElementById("inCoachEmail");
     const phoneInp = document.getElementById("inCoachPhone");
     const ageGroupVal = ageGroupInp.value.trim();
+    const side = sportType(sport) === "individual" ? "" : sideInp.value;
     const name = nameInp.value.trim();
     const email = emailInp.value.trim();
     const phone = phoneInp.value.trim();
@@ -880,13 +906,13 @@
     if(!email){ alert("Enter the coach's email — it's required so they can receive automatic result notifications."); emailInp.focus(); return; }
     if(!isValidEmail(email)){ alert("Enter a valid email address."); emailInp.focus(); return; }
 
-    const existing = state.coaches.find(c => c.sportId === sport.id && groupsMatch(c.ageGroup, ageGroupVal));
+    const existing = state.coaches.find(c => c.sportId === sport.id && groupsMatch(c.ageGroup, ageGroupVal) && (c.side || "") === side);
     if(existing){
       existing.name = name;
       existing.email = email;
       existing.phone = phone;
     } else {
-      state.coaches.push({ id: uid(), sportId: sport.id, ageGroup: ageGroupVal, name, email, phone });
+      state.coaches.push({ id: uid(), sportId: sport.id, ageGroup: ageGroupVal, side: side || null, name, email, phone });
     }
     nameInp.value = ""; emailInp.value = ""; phoneInp.value = "";
     saveState(); renderCoaches(); renderSides(); renderFixtureDetail(); renderCoachLeaderboard();
@@ -1645,7 +1671,7 @@
       const positions = board[side] || {};
       const groupPositions = positionsForGroup(sport, group);
       const hasAny = groupPositions.some(pos => resolvedSlot(sport.id, group, side, pos, positions[pos]));
-      const groupCoach = coachFor(sport.id, group);
+      const groupCoach = coachFor(sport.id, group, side);
       const slots = groupPositions
         .map(pos => slotEditableHtml(sport.id, group, side, pos, positions[pos]))
         .join("");
@@ -2301,7 +2327,7 @@
     state.results.forEach(r => {
       const sport = state.sports.find(s => s.id === r.sportId);
       if(!sport || sportType(sport) !== "team") return; // win rate only applies to team sports
-      const coach = coachFor(r.sportId, r.ageGroup);
+      const coach = coachFor(r.sportId, r.ageGroup, r.side);
       if(!coach) return;
       const key = coach.name.trim().toLowerCase() + "|" + (coach.email || "").trim().toLowerCase();
       if(!map[key]) return;
@@ -2405,7 +2431,7 @@
     const excludeIds = fixture ? unavailableIdsFor(fixture.id) : null;
     const { rows, bench } = collectTeamSheetRows(sportId, group, side, excludeIds);
     const title = `${sport.name} — ${label}`;
-    const groupCoach = coachFor(sportId, group);
+    const groupCoach = coachFor(sportId, group, side);
     let subtitle;
     if(fixture){
       const dateLabel = new Date(fixture.date + "T00:00:00").toLocaleDateString(undefined,{weekday:"long", day:"numeric", month:"long", year:"numeric"});
@@ -2422,7 +2448,7 @@
     const result = resultFor(fixture.id, group, side);
     if(!result){ alert("No result captured for this team yet."); return; }
     const label = seniorSideLabel(sport, group, side) || `${group} · ${side}`;
-    const groupCoach = coachFor(sportId, group);
+    const groupCoach = coachFor(sportId, group, side);
     const dateLabel = new Date(fixture.date + "T00:00:00").toLocaleDateString(undefined,{weekday:"long", day:"numeric", month:"long", year:"numeric"});
     const subtitle = `vs ${fixture.opponent} · ${dateLabel}${fixture.venue ? " · " + fixture.venue + (venueAddressFor(fixture.venue) ? " (" + venueAddressFor(fixture.venue) + ")" : "") : ""}`;
 
@@ -2580,7 +2606,7 @@
   // (see the chat writeup for how this plugs into Supabase).
   // ---------- result notification email (real send via Edge Function) ----------
   async function sendResultNotification(sport, fixture, result, warningPrefix){
-    const notifyCoach = coachFor(result.sportId, result.ageGroup);
+    const notifyCoach = coachFor(result.sportId, result.ageGroup, result.side);
     const resultLabel = seniorSideLabel(sport, result.ageGroup, result.side) || `${result.ageGroup} ${result.side}`;
     const payload = {
       sportName: sport.name,

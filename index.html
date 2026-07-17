@@ -152,13 +152,19 @@
   </div>
 
   <div class="section-title" id="sec-coaches">
-    <h2>Head coaches</h2>
-    <span class="sub">one coach per age group</span>
+    <h2>Coaches</h2>
+    <span class="sub">a head coach per age group, or assign coaches to specific sides</span>
   </div>
   <div class="panel add-form" id="coachAddForm">
     <div class="field">
       <label>Age group</label>
       <select id="inCoachAgeGroup" style="width:110px;"></select>
+    </div>
+    <div class="field" id="inCoachSideField">
+      <label>Side</label>
+      <select id="inCoachSide" style="width:150px;">
+        <option value="">Head coach (all sides)</option>
+      </select>
     </div>
     <div class="field grow">
       <label>Coach name</label>
@@ -174,6 +180,7 @@
     </div>
     <button class="btn btn-primary" id="btnAddCoach">+ Assign coach</button>
   </div>
+  <p class="dob-hint">A head coach covers every side in their age group by default. Adding a coach for a specific side (A–E) overrides the head coach for that side only — everyone else still falls back to the head coach.</p>
   <div id="coachGrid" class="picks-grid"></div>
 
   <div class="section-title" id="sec-roster">
