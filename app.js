@@ -606,7 +606,7 @@
     const tier = currentRequiredTier();
     const vatNote = "excl. VAT";
     if(isFreePlan()){
-      const daysLeft = Math.max(0, FREE_PLAN_MAX_DAYS - daysSinceOrgCreated());
+      const daysLeft = Math.max(0, Math.round(FREE_PLAN_MAX_DAYS - daysSinceOrgCreated()));
       box.className = "consent-status-box unconfirmed";
       box.innerHTML = `Free trial${daysLeft > 0 ? ` — ${daysLeft} day${daysLeft === 1 ? "" : "s"} remaining` : " — trial period has ended"}.<br>Based on your current sports &amp; coaches, you'd be on the <strong>${escapeHtml(tier.label)}</strong> plan — R${tier.priceZAR}/month (${vatNote}) once you upgrade.`;
     } else {
@@ -2000,6 +2000,27 @@
     const dateLabel = new Date(f.date + "T00:00:00").toLocaleDateString(undefined,{weekday:"long", day:"numeric", month:"long", year:"numeric"}) + (f.time ? ` · ${formatFixtureTime(f.time)}` : "");
     const excludeIds = unavailableIdsFor(f.id);
 
+    // Duplicate detection scoped per age group, across whichever sides of
+    // that age group are actually booked for this fixture (matching the
+    // same "flagged if placed in more than one slot" logic used on the
+    // Team Sides board, just scoped to this fixture's entries instead of
+    // always checking all five A-E sides).
+    const entriesByGroup = {};
+    f.entries.forEach(en => { (entriesByGroup[en.ageGroup] = entriesByGroup[en.ageGroup] || []).push(en.side); });
+    const duplicatesByGroup = {};
+    Object.keys(entriesByGroup).forEach(group => {
+      const groupPositionsAll = positionsForGroup(sport, group);
+      const counts = {};
+      entriesByGroup[group].forEach(side => {
+        const sideBoard = computeSides(sport.id, group, excludeIds);
+        groupPositionsAll.forEach(pos => {
+          const resolved = resolvedSlot(sport.id, group, side, pos, sideBoard[side][pos]);
+          if(resolved) counts[resolved.player.id] = (counts[resolved.player.id] || 0) + 1;
+        });
+      });
+      duplicatesByGroup[group] = new Set(Object.keys(counts).filter(id => counts[id] > 1));
+    });
+
     const groupsHtml = f.entries.map(({ ageGroup: group, side }) => {
       const board = computeSides(sport.id, group, excludeIds);
       const positions = board[side] || {};
@@ -2007,7 +2028,7 @@
       const hasAny = groupPositions.some(pos => resolvedSlot(sport.id, group, side, pos, positions[pos]));
       const groupCoach = coachFor(sport.id, group, side);
       const slots = groupPositions
-        .map(pos => slotEditableHtml(sport.id, group, side, pos, positions[pos]))
+        .map(pos => slotEditableHtml(sport.id, group, side, pos, positions[pos], duplicatesByGroup[group]))
         .join("");
 
       const seniorLabel = seniorSideLabel(sport, group, side);
@@ -2839,6 +2860,57 @@
     return { rows, bench };
   }
 
+  function printAttendanceRegister(practiceId){
+    const p = state.practices.find(x => x.id === practiceId);
+    if(!p) return;
+    const sport = state.sports.find(s => s.id === p.sportId);
+    const eligible = state.players
+      .filter(pl => pl.sportId === p.sportId && p.ageGroups.some(g => groupsMatch(g, ageGroupForPlayer(pl))))
+      .sort((a,b) => a.name.localeCompare(b.name));
+
+    const win = window.open("", "_blank", "width=700,height=900");
+    if(!win){ alert("Please allow pop-ups to print the attendance register."); return; }
+
+    const dateLabel = new Date(p.date + "T00:00:00").toLocaleDateString(undefined,{weekday:"long", day:"numeric", month:"long", year:"numeric"}) + (p.time ? ` · ${formatFixtureTime(p.time)}` : "");
+    const hasAttendance = (p.attendedPlayerIds || []).length > 0;
+    const rowsHtml = eligible.map(pl => {
+      const attended = (p.attendedPlayerIds || []).includes(pl.id);
+      const mark = hasAttendance ? (attended ? "✓" : "") : "";
+      return `<tr><td class="mark-col">${mark}</td><td>${escapeHtml(pl.name)}</td></tr>`;
+    }).join("");
+
+    win.document.write(`<!DOCTYPE html><html><head><title>Attendance — ${escapeHtml(p.ageGroups.join(", "))}</title>
+      <style>
+        body{font-family:Arial,Helvetica,sans-serif; padding:32px; color:#14201A;}
+        .print-header{display:flex; align-items:center; gap:18px; margin-bottom:22px; padding-bottom:16px; border-bottom:2px solid #14201A;}
+        .print-header img{height:80px; width:auto; display:block;}
+        h1{font-size:22px; margin:0 0 2px;}
+        .sub{color:#5B6B63; font-size:13px; margin-bottom:18px;}
+        table{width:100%; border-collapse:collapse;}
+        td{padding:10px; border-bottom:1px solid #ddd; font-size:14px;}
+        td.mark-col{width:36px; text-align:center; font-weight:700; font-size:16px; border-right:1px solid #ddd;}
+        th{padding:8px 10px; text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:#5B6B63; border-bottom:2px solid #14201A;}
+        th.mark-col{width:36px; text-align:center;}
+        .footer{margin-top:36px; font-size:10px; color:#999;}
+        @media print{ body{padding:0;} }
+      </style></head><body>
+      <div class="print-header">
+        ${currentOrgEmblemUrl ? `<img src="${currentOrgEmblemUrl}" alt="${escapeHtml(currentOrgName || "Club emblem")}">` : ""}
+        <img src="${TOTEM_PRINT_LOGO_B64}" alt="Totem">
+      </div>
+      <h1>${escapeHtml(sport ? sport.name : "")} practice — ${escapeHtml(p.ageGroups.join(", "))}</h1>
+      <div class="sub">${dateLabel}${p.venue ? " · " + escapeHtml(p.venue) : ""}</div>
+      <table>
+        <tr><th class="mark-col">${hasAttendance ? "✓" : ""}</th><th>Player</th></tr>
+        ${rowsHtml}
+      </table>
+      <div class="footer">Generated by Totem™${hasAttendance ? "" : " — blank register, ready to fill in"}</div>
+      </body></html>`);
+    win.document.close();
+    win.focus();
+    win.print();
+  }
+
   function printTeamSheet(title, subtitle, rows, bench, coachName){
     const win = window.open("", "_blank", "width=700,height=900");
     if(!win){ alert("Please allow pop-ups to print the team sheet."); return; }
@@ -3294,6 +3366,7 @@
           </div>
           <div class="fixture-card-actions">
             <button class="btn btn-ghost btn-small" data-action="take-attendance" data-id="${p.id}">Take attendance</button>
+            <button class="btn btn-ghost btn-small" data-action="print-register" data-id="${p.id}">Print register</button>
             <button class="btn btn-ghost btn-small" data-action="edit-practice" data-id="${p.id}">Edit</button>
             <button class="btn btn-danger btn-small" data-action="delete-practice" data-id="${p.id}">Remove</button>
           </div>
@@ -3302,6 +3375,9 @@
 
     el.querySelectorAll('[data-action="take-attendance"]').forEach(btn => {
       btn.addEventListener("click", () => openAttendanceModal(btn.dataset.id));
+    });
+    el.querySelectorAll('[data-action="print-register"]').forEach(btn => {
+      btn.addEventListener("click", () => printAttendanceRegister(btn.dataset.id));
     });
     el.querySelectorAll('[data-action="edit-practice"]').forEach(btn => {
       btn.addEventListener("click", () => {

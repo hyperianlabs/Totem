@@ -654,11 +654,12 @@
   background:var(--panel); border:1px solid var(--line); border-radius:10px;
   box-shadow:0 10px 30px rgba(0,0,0,0.2); padding:8px; min-width:170px;
   display:flex; flex-direction:column; gap:4px;
+  height:auto !important; max-height:none !important; min-height:0 !important; overflow:visible !important;
 }
 .account-dropdown button{
   background:transparent; color:var(--ink); border:none; border-radius:7px;
   padding:9px 12px; font-size:13px; font-weight:600; cursor:pointer; text-align:left;
-  font-family:'Inter',sans-serif;
+  font-family:'Inter',sans-serif; flex-shrink:0; width:100%;
 }
 .account-dropdown button:hover{background:var(--chalk);}
 #btnLogout{color:var(--clay);}
