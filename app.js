@@ -303,6 +303,7 @@
     loadStaffList();
     renderConsentStatus();
     renderEmblemPreview();
+    renderSubscriptionStatus();
   });
   function renderEmblemPreview(){
     const preview = document.getElementById("emblemPreview");
@@ -541,15 +542,83 @@
   const CRICKET_TEMPLATE = { id:"cricket", name:"Cricket", iconKey:"cricket", type:"team",
     positions:["Opening Batsman 1","Opening Batsman 2","Batsman 3","Batsman 4","Batsman 5","All-rounder","Wicketkeeper","Bowler 1","Bowler 2","Bowler 3","Bowler 4"],
     benchSize:4 };
-  const DEFAULT_SPORTS = [
-    { id:"netball", name:"Netball", iconKey:"netball", type:"team", positions:["GS","GA","WA","C","WD","GD","GK"], benchSize:3 },
-    { id:"hockey", name:"Field Hockey", iconKey:"hockey", type:"team", positions:["Goalkeeper","Right Back","Left Back","Right Half","Left Half","Right Wing","Centre Forward","Left Wing"], benchSize:3 },
-    JSON.parse(JSON.stringify(SWIMMING_TEMPLATE)),
-    JSON.parse(JSON.stringify(ATHLETICS_TEMPLATE))
+  const NETBALL_TEMPLATE = { id:"netball", name:"Netball", iconKey:"netball", type:"team", positions:["GS","GA","WA","C","WD","GD","GK"], benchSize:3 };
+  const HOCKEY_TEMPLATE = { id:"hockey", name:"Field Hockey", iconKey:"hockey", type:"team", positions:["Goalkeeper","Right Back","Left Back","Right Half","Left Half","Right Wing","Centre Forward","Left Wing"], benchSize:3 };
+  // Every new club starts with zero sports — picking at least one is now a
+  // mandatory first step (see the onboarding check in loadState below), which
+  // keeps this list of templates as the "quick add" menu rather than an
+  // auto-seeded default. Custom sports remain fully supported alongside these.
+
+  // ---------- subscription tiers ----------
+  // Whichever limit (sports or coaches) is hit first determines the required
+  // tier — coaches are counted as unique people (by email), not per
+  // assignment, so a coach covering several age groups only counts once.
+  // Prices are ZAR/month, excluding VAT (added at checkout via Paystack).
+  const SUBSCRIPTION_TIERS = [
+    { id:"tier1", label:"Starter",    maxSports:1,        maxCoaches:4,         priceZAR:99  },
+    { id:"tier2", label:"Growth",     maxSports:2,        maxCoaches:6,         priceZAR:169 },
+    { id:"tier3", label:"Club",       maxSports:3,        maxCoaches:8,         priceZAR:289 },
+    { id:"tier4", label:"Multi-Sport",maxSports:4,        maxCoaches:10,        priceZAR:399 },
+    { id:"tier5", label:"Unlimited",  maxSports:Infinity, maxCoaches:Infinity,  priceZAR:499 }
   ];
-  // Swimming/Athletics templates above are also used by the "Quick add"
-  // buttons in the Add Sport modal, for re-adding either one with its full
-  // event data intact if it's ever removed from a club's sport list.
+  function uniqueCoachCount(){
+    const emails = new Set(state.coaches.map(c => (c.email || "").toLowerCase().trim()).filter(Boolean));
+    return emails.size;
+  }
+  function tierForUsage(sportsCount, coachCount){
+    return SUBSCRIPTION_TIERS.find(t => sportsCount <= t.maxSports && coachCount <= t.maxCoaches) || SUBSCRIPTION_TIERS[SUBSCRIPTION_TIERS.length - 1];
+  }
+  function currentRequiredTier(){
+    return tierForUsage(state.sports.length, uniqueCoachCount());
+  }
+  function tierIndexById(id){ return SUBSCRIPTION_TIERS.findIndex(t => t.id === id); }
+
+  // Blocks an action that would push a PAID org past their current tier's
+  // limits, directing them to upgrade first. Free-plan orgs (whether within
+  // the trial or past it) are never blocked here — sports/coaches stay
+  // unrestricted until an org is actually on a paid tier; the separate
+  // results-based usage banner is what signals free-trial conversion.
+  function checkTierAllowsChange(newSportsCount, newCoachCount){
+    if(isFreePlan()) return true;
+    const currentTierIdx = tierIndexById(currentOrgPlan);
+    if(currentTierIdx === -1) return true; // unrecognized plan value — don't block
+    const currentTier = SUBSCRIPTION_TIERS[currentTierIdx];
+    if(newSportsCount <= currentTier.maxSports && newCoachCount <= currentTier.maxCoaches) return true;
+    const needed = tierForUsage(newSportsCount, newCoachCount);
+    alert(`This needs the ${needed.label} plan (R${needed.priceZAR}/month) — you're currently on ${currentTier.label} (R${currentTier.priceZAR}/month). Upgrade from Club Settings to continue.`);
+    return false;
+  }
+
+  let lastAnnouncedTierId = null;
+  function announceTierIfChanged(){
+    const tier = currentRequiredTier();
+    if(tier.id === lastAnnouncedTierId) return;
+    lastAnnouncedTierId = tier.id;
+    const vatNote = "excl. VAT";
+    if(isFreePlan()){
+      showToast(`Based on your current sports & coaches, you'd be on the ${tier.label} plan — R${tier.priceZAR}/month (${vatNote}) once your free trial ends.`);
+    } else {
+      showToast(`You're now using the ${tier.label} plan — R${tier.priceZAR}/month (${vatNote}).`);
+    }
+  }
+  function renderSubscriptionStatus(){
+    const box = document.getElementById("subscriptionStatusBox");
+    const tier = currentRequiredTier();
+    const vatNote = "excl. VAT";
+    if(isFreePlan()){
+      const daysLeft = Math.max(0, FREE_PLAN_MAX_DAYS - daysSinceOrgCreated());
+      box.className = "consent-status-box unconfirmed";
+      box.innerHTML = `Free trial${daysLeft > 0 ? ` — ${daysLeft} day${daysLeft === 1 ? "" : "s"} remaining` : " — trial period has ended"}.<br>Based on your current sports &amp; coaches, you'd be on the <strong>${escapeHtml(tier.label)}</strong> plan — R${tier.priceZAR}/month (${vatNote}) once you upgrade.`;
+    } else {
+      const planIdx = tierIndexById(currentOrgPlan);
+      const planTier = planIdx >= 0 ? SUBSCRIPTION_TIERS[planIdx] : null;
+      box.className = "consent-status-box confirmed";
+      box.innerHTML = planTier
+        ? `You're on the <strong>${escapeHtml(planTier.label)}</strong> plan — R${planTier.priceZAR}/month (${vatNote}).`
+        : `Paid plan active.`;
+    }
+  }
+
   const DEFAULT_FIELDS = [
     {key:"fitness", label:"Fitness"},
     {key:"skill", label:"Skill"},
@@ -561,7 +630,7 @@
   ];
 
   let state = {
-    sports: JSON.parse(JSON.stringify(DEFAULT_SPORTS)),
+    sports: [],
     metricFields: JSON.parse(JSON.stringify(DEFAULT_FIELDS)),
     players: [],
     fixtures: [],
@@ -653,7 +722,7 @@
     const OLD_HOCKEY_POSITIONS = JSON.stringify(["Goalkeeper","Defender","Midfielder","Forward"]);
     const hockeySport = state.sports.find(s => s.id === "hockey");
     if(hockeySport && JSON.stringify(hockeySport.positions) === OLD_HOCKEY_POSITIONS){
-      hockeySport.positions = JSON.parse(JSON.stringify(DEFAULT_SPORTS.find(s => s.id === "hockey").positions));
+      hockeySport.positions = JSON.parse(JSON.stringify(HOCKEY_TEMPLATE.positions));
     }
 
     // Players used to store a plain "age" number — now they store a date of
@@ -690,12 +759,16 @@
 
     // Add the new Athletics sport for anyone who already has saved data from
     // before it existed (existing sports/players/etc. are left untouched).
-    if(!state.sports.find(s => s.id === "athletics")){
-      state.sports.push(JSON.parse(JSON.stringify(DEFAULT_SPORTS.find(s => s.id === "athletics"))));
+    // Guarded to established accounts only (sports.length > 0) — a brand new
+    // account with zero sports is meant to stay empty until onboarding.
+    if(state.sports.length > 0 && !state.sports.find(s => s.id === "athletics")){
+      state.sports.push(JSON.parse(JSON.stringify(ATHLETICS_TEMPLATE)));
     }
 
     storageReady = true;
     render();
+    lastAnnouncedTierId = currentRequiredTier().id; // silent baseline — toasts only fire for changes after this
+    if(state.sports.length === 0) openSportModal(true);
   }
   async function saveState(){
     await persistClubState();
@@ -1079,6 +1152,7 @@
         const id = e.target.dataset.id;
         state.coaches = state.coaches.filter(c => c.id !== id);
         saveState(); renderCoaches(); renderSides(); renderFixtureDetail(); renderCoachLeaderboard();
+        announceTierIfChanged();
       });
     });
   }
@@ -1105,6 +1179,10 @@
     if(!email){ alert("Enter the coach's email — it's required so they can receive automatic result notifications."); emailInp.focus(); return; }
     if(!isValidEmail(email)){ alert("Enter a valid email address."); emailInp.focus(); return; }
 
+    const projectedEmails = new Set(state.coaches.map(c => (c.email || "").toLowerCase().trim()));
+    projectedEmails.add(email.toLowerCase().trim());
+    if(!checkTierAllowsChange(state.sports.length, projectedEmails.size)) return;
+
     const existing = state.coaches.find(c => c.sportId === sport.id && groupsMatch(c.ageGroup, ageGroupVal) && (c.side || "") === side);
     if(existing){
       existing.name = name;
@@ -1115,6 +1193,7 @@
     }
     nameInp.value = ""; emailInp.value = ""; phoneInp.value = "";
     saveState(); renderCoaches(); renderSides(); renderFixtureDetail(); renderCoachLeaderboard();
+    announceTierIfChanged();
   });
 
   // ---------- rendering ----------
@@ -1131,7 +1210,7 @@
     const addBtn = document.createElement("button");
     addBtn.className = "sport-tab add";
     addBtn.textContent = "+ Add sport";
-    addBtn.addEventListener("click", openSportModal);
+    addBtn.addEventListener("click", () => openSportModal(false));
     nav.appendChild(addBtn);
   }
 
@@ -3577,7 +3656,9 @@
     });
   }
 
-  function openSportModal(){
+  let sportModalMandatory = false;
+  function openSportModal(mandatory){
+    sportModalMandatory = !!mandatory;
     document.getElementById("sportModal").classList.add("open");
     document.getElementById("newSportName").value = "";
     document.getElementById("newSportPositions").value = "";
@@ -3585,6 +3666,8 @@
     const teamRadio = document.querySelector('input[name="newSportType"][value="team"]');
     if(teamRadio) teamRadio.checked = true;
     document.getElementById("newSportPositionsLabel").textContent = "Positions (comma separated)";
+    document.getElementById("sportModalWelcome").style.display = mandatory ? "" : "none";
+    document.getElementById("cancelSport").style.display = mandatory ? "none" : "";
     selectedNewSportIcon = null;
     renderIconPicker();
   }
@@ -3603,11 +3686,16 @@
       return;
     }
     if(state.sports.find(s => s.id === template.id)){ alert(`${template.name} is already added.`); return; }
+    if(!checkTierAllowsChange(state.sports.length + 1, uniqueCoachCount())) return;
     state.sports.push(JSON.parse(JSON.stringify(template)));
     state.activeSport = template.id;
+    sportModalMandatory = false;
     document.getElementById("sportModal").classList.remove("open");
     saveState(); render();
+    announceTierIfChanged();
   }
+  document.getElementById("quickAddNetball").addEventListener("click", () => addSportFromTemplate(NETBALL_TEMPLATE));
+  document.getElementById("quickAddHockey").addEventListener("click", () => addSportFromTemplate(HOCKEY_TEMPLATE));
   document.getElementById("quickAddSwimming").addEventListener("click", () => addSportFromTemplate(SWIMMING_TEMPLATE));
   document.getElementById("quickAddAthletics").addEventListener("click", () => addSportFromTemplate(ATHLETICS_TEMPLATE));
   document.getElementById("quickAddRugby").addEventListener("click", () => addSportFromTemplate(RUGBY_TEMPLATE));
@@ -3621,6 +3709,7 @@
     const name = document.getElementById("newSportName").value.trim();
     const posRaw = document.getElementById("newSportPositions").value.trim();
     if(!name){ alert("Enter a sport name."); return; }
+    if(!checkTierAllowsChange(state.sports.length + 1, uniqueCoachCount())) return;
     const positions = posRaw ? posRaw.split(",").map(s => s.trim()).filter(Boolean) : ["Player"];
     const id = name.toLowerCase().replace(/[^a-z0-9]+/g,"-") + "-" + uid().slice(0,4);
     const typeInput = document.querySelector('input[name="newSportType"]:checked');
@@ -3629,11 +3718,13 @@
     const benchSize = Number.isFinite(benchSizeInput) && benchSizeInput >= 0 ? benchSizeInput : 3;
     state.sports.push({ id, name, iconKey: selectedNewSportIcon, type, positions, benchSize });
     state.activeSport = id;
+    sportModalMandatory = false;
     document.getElementById("sportModal").classList.remove("open");
     saveState(); render();
+    announceTierIfChanged();
   });
   document.getElementById("sportModal").addEventListener("click", (e) => {
-    if(e.target.id === "sportModal") document.getElementById("sportModal").classList.remove("open");
+    if(e.target.id === "sportModal" && !sportModalMandatory) document.getElementById("sportModal").classList.remove("open");
   });
 
   (function setupDobBounds(){

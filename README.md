@@ -137,10 +137,12 @@ This is the one part with a few more steps, because sending email needs to happe
 
 ## Part 6 — Payments groundwork (not live yet — for when you're ready)
 
-This is already built into the app, but **dormant** until you create a real Stripe account — nothing charges anyone until you complete the steps below.
+This is already built into the app, but **dormant** until you create a real Paystack account — nothing charges anyone until you complete the steps below.
 
-**What's already working right now, with zero Stripe account needed:**
-- Every organization has a `plan` (defaults `'free'`), `plan_status`, and Stripe ID columns — run `migration-payments.sql` once to add these.
+**Important — why Paystack and not Stripe:** Stripe doesn't directly support businesses registered in South Africa. Paystack (also Stripe-owned, but a genuinely separate product with its own API and webhook format) is the natural fit — properly licensed locally, and the actual real path for a South African business. Everything else about the payment design (tiers, blocking, VAT-exclusive pricing) is unaffected by this — only the actual payment-processor integration is Paystack-specific.
+
+**What's already working right now, with zero Paystack account needed:**
+- Every organization has a `plan` (defaults `'free'`), `plan_status`, and payment-provider ID columns — run `migration-payments.sql` then `migration-paystack.sql` once, in that order (the second one renames the ID columns from Stripe-specific names to neutral ones).
 - Every organization also has an `org_type` (`'club'` or `'school'`) — run `migration-org-type.sql` once to add this. Captured at signup, editable later via **Club settings**.
 
 **Duplicate club detection:** run `migration-duplicate-check.sql` once. When someone types a club name during "Create a new club" that exactly matches (case/whitespace-insensitive) an existing club, they get a clear warning suggesting they use "Join an existing club" instead, and must type a short explanation before they can proceed anyway (e.g., a genuinely different, unrelated club that happens to share a name). That explanation is saved on the new organization's `duplicate_justification` column — worth glancing at occasionally in Table Editor to catch anything that slipped through. This deliberately only catches close/exact name matches, not loosely similar ones (e.g. "Kingsmead" vs "Kingsmead School" would **not** trigger it) — to avoid annoying genuinely new clubs with false positives.
@@ -185,20 +187,43 @@ No migration needed — this lives entirely in the same JSON blob everything els
 **How it affects ratings:** once a player has at least one *past* practice logged for their age group, their **Reliability** rating on the roster stops being a manual slider and becomes automatically calculated from real attendance — linear, 100% attendance = 10, 10% attendance = 1 (i.e. rating = attendance % ÷ 10). The ratings panel shows this clearly, with the actual attendance percentage next to it, rather than silently overriding what a coach typed in. Only *past* sessions count — a practice that hasn't happened yet never drags anyone's rating down, and a player with zero practice history yet keeps their existing manual rating until real data exists.
 
 **One honest limitation worth knowing:** this doesn't currently account for when a player joined the roster — someone added partway through a season will show as having "missed" every practice before they existed. Fine for most cases, but worth being aware of for a player who joined recently and appears to have unfairly low reliability at first.
-- **The conversion trigger is a single, clean metric: results captured** — once a free-plan org passes **270 days since signup (~9 months) OR their type's results threshold** (100 for a school, 20 for a club/single team — whichever comes first), a banner appears prompting them to upgrade. Results is the meaningful signal — it means real season-long usage, not just an account existing — time is the backstop for accounts that barely use it yet never leave either. There's deliberately **no limit on sports or players** — setup work (adding sports, rosters, scheduling fixtures) costs nothing toward the limit, only actual captured match results count, and results scale with program size regardless of how many sports a club runs (they're counted per team per fixture, so a big single-sport school still hits the threshold from game volume alone). This keeps free-tier onboarding completely unrestricted — a school can set up their entire multi-sport program on day one — while still converting genuinely active clubs fairly.
-- This is currently a **visible banner, not a hard block** — since there's no live payment link yet, actually locking someone out before they can pay would be counterproductive. Once Stripe is wired up, this is the natural point to make it a hard block instead (see `renderUsageBanner()` in `app.js`).
+
+## Subscription tiers & Paystack setup
+
+- **The conversion trigger is a single, clean metric: results captured** — once a free-plan org passes **270 days since signup (~9 months) OR their type's results threshold** (100 for a school, 20 for a club/single team — whichever comes first), a banner appears prompting them to upgrade. Results is the meaningful signal — it means real season-long usage, not just an account existing — time is the backstop for accounts that barely use it yet never leave either. There's deliberately **no limit on sports or players during the free trial** — setup work (adding sports, rosters, scheduling fixtures) costs nothing toward the limit, only actual captured match results count. This keeps free-tier onboarding completely unrestricted — a school can set up their entire multi-sport program on day one — while still converting genuinely active clubs fairly.
+- This trial-expiry signal is currently a **visible banner, not a hard block** — since there's no live payment link yet, actually locking someone out before they can pay would be counterproductive. Once Paystack is wired up, this is the natural point to make it a hard block instead (see `renderUsageBanner()` in `app.js`).
 - **Important:** this clock starts the moment an organization is created — including any testing/beta accounts made before a real public launch. `LAUNCH_DATE` in `config.js` is already set — every org's clock starts counting from that date instead of their real signup date, so nothing done during testing counts against anyone.
 - Org type (school vs. club/single team) is set at signup and editable any time via **Club settings** in the header.
-- `supabase/functions/stripe-webhook/index.ts` is fully written and ready to deploy — it listens for Stripe subscription events and keeps `organizations.plan` in sync automatically. It just has nothing to listen to yet.
+- `supabase/functions/paystack-webhook/index.ts` is fully written and ready to deploy — it listens for Paystack subscription events and keeps `organizations.plan` in sync automatically. It just has nothing to listen to yet.
 
-**What only you can do, once you're ready to actually charge money:**
-1. Create a Stripe account (stripe.com) — this needs your real business/bank details, same as any payment processor.
-2. In Stripe, create a Product + Price for your paid plan.
-3. Set up a Checkout flow (or the simpler no-code **Payment Link**, quick to test with) — either way, the `client_reference_id` needs to be set to the organization's id, so Stripe can tell this function which club just paid. Full instructions are in the comments at the top of `stripe-webhook/index.ts`.
-4. Deploy the webhook function and set its two secrets (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) — same `supabase functions deploy` / `supabase secrets set` pattern you already know from setting up email.
-5. Swap the placeholder `showUpgradePrompt()` alert in the app for a real link to your Stripe Checkout/Payment Link.
+**Subscription tiers — the real pricing structure:**
 
-**Worth deciding before you flip this on:** 270 days / 100 / 20 are starting recommendations, not fixed — easy to adjust via `FREE_PLAN_MAX_DAYS` and `FREE_PLAN_MAX_RESULTS_BY_TYPE` in `app.js` once you've seen real signup behavior.
+| Tier | Sports | Coaches | Price (ZAR/month, excl. VAT) |
+|---|---|---|---|
+| Starter | 1 | 4 | R99 |
+| Growth | 2 | 6 | R169 |
+| Club | 3 | 8 | R289 |
+| Multi-Sport | 4 | 10 | R399 |
+| Unlimited | unlimited | unlimited | R499 |
+
+**How tier detection actually works, already fully built into the app (no setup needed for this part):**
+- Whichever limit is hit first — sports or coaches — determines the required tier. Coaches are counted as **unique people by email**, not per assignment, so one coach covering 3 age groups still only counts once.
+- **During the free trial**, this is purely informational — a toast and a note in Club Settings show what tier a club *would* need, but nothing is ever blocked. This matches the existing free-trial promise of no sports/player limits.
+- **Once an org is on a real paid tier** (`organizations.plan` is `tier1`–`tier5`, set automatically by the webhook below), adding a sport or coach that would exceed that tier's limits is blocked with a clear upgrade prompt — never silently billed more.
+- **New signups now start with zero sports** (previously auto-seeded with 4) and are dropped straight into a mandatory "pick your sports" screen right after signup — Netball, Hockey, Swimming, Athletics, Rugby, and Cricket all have one-click Quick Add templates for this.
+
+**Setting this up for real in Paystack:**
+
+1. Create a Paystack account (paystack.com) with your real South African business/bank details.
+2. In Paystack Dashboard → Payments → Plans, create **five plans**, one per tier above. Amounts are in **cents** (smallest currency unit) — R99 = 9900, R169 = 16900, R289 = 28900, R399 = 39900, R499 = 49900. Interval: monthly. Note each plan's `plan_code` (starts `PLN_`) once created.
+3. **VAT:** since these prices exclude VAT, and Paystack doesn't have a documented automatic exclusive-tax-calculation feature the way Stripe Tax does — worth confirming directly with Paystack support and with an accountant how they expect VAT to be handled on these amounts. The common approach is baking VAT into the plan amount itself, since there's no built-in "add tax at checkout" step to rely on here.
+4. Set up a checkout flow for each tier (Paystack Inline JS, or a hosted Payment Page per plan) — whichever you use, pass the organization's id in the `metadata` field when initializing the transaction (e.g. `metadata: { org_id: "..." }`), so the webhook knows which club just paid. Full instructions are in the comments at the top of `paystack-webhook/index.ts`.
+5. Deploy the webhook and set its secret: `supabase functions deploy paystack-webhook --no-verify-jwt`, then `supabase secrets set PAYSTACK_SECRET_KEY=sk_...`.
+6. In Paystack Dashboard → Settings → API Keys & Webhooks, set your webhook URL to `https://YOUR-PROJECT-REF.supabase.co/functions/v1/paystack-webhook`.
+7. **Fill in the real plan codes** — open `paystack-webhook/index.ts`, find the `PLAN_CODE_TO_TIER` map near the top, and replace the five placeholder lines with your actual Paystack plan codes mapped to `"tier1"` through `"tier5"`. Redeploy the function after editing.
+8. Swap the placeholder `showUpgradePrompt()` alert and the upgrade message inside `checkTierAllowsChange()` in `app.js` for real links to the matching tier's checkout.
+
+**Worth deciding before you flip this on:** 270 days / 100 / 20 (the free-trial thresholds) are starting recommendations, not fixed — easy to adjust via `FREE_PLAN_MAX_DAYS` and `FREE_PLAN_MAX_RESULTS_BY_TYPE` in `app.js`. The tier limits and prices themselves live in the `SUBSCRIPTION_TIERS` constant near the top of `app.js`, equally easy to adjust once you've seen real signup behavior.
 
 ## Page layout, bench size, and Rugby/Cricket
 

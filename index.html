@@ -433,6 +433,10 @@
       <p class="icon-picker-hint">Appears next to the Totem logo on printed team sheets, results, and season summaries. PNG or JPG, up to 2MB.</p>
     </div>
     <div class="field">
+      <label>Subscription</label>
+      <div class="consent-status-box" id="subscriptionStatusBox"></div>
+    </div>
+    <div class="field">
       <label>Staff</label>
       <div id="staffList" class="staff-list"></div>
       <p class="icon-picker-hint">Removing someone here revokes their access to this club's data — it doesn't delete their login entirely.</p>
@@ -454,9 +458,12 @@
 <div class="overlay" id="sportModal">
   <div class="modal modal-wide">
     <h3>Add a sport</h3>
+    <p class="icon-picker-hint" id="sportModalWelcome" style="display:none;">Welcome to Totem! Pick at least one sport to get started — you can always add more later.</p>
     <div class="field">
       <label>Quick add</label>
       <div class="chip-check-row">
+        <button type="button" class="btn btn-ghost btn-small" id="quickAddNetball">+ Netball</button>
+        <button type="button" class="btn btn-ghost btn-small" id="quickAddHockey">+ Hockey</button>
         <button type="button" class="btn btn-ghost btn-small" id="quickAddSwimming">+ Swimming</button>
         <button type="button" class="btn btn-ghost btn-small" id="quickAddAthletics">+ Athletics</button>
         <button type="button" class="btn btn-ghost btn-small" id="quickAddRugby">+ Rugby</button>
