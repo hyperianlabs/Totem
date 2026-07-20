@@ -312,7 +312,7 @@
   }
   .side-card .side-head{
     background:var(--pitch-deep); color:var(--chalk); padding:10px 14px;
-    display:flex; align-items:center; gap:8px;
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap;
   }
   .side-card .side-head .letter{
     font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:0.05em;
