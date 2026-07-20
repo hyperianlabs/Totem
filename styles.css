@@ -299,6 +299,10 @@
 
   /* ===== Team Sides ===== */
   .sides-tabs{display:flex; gap:8px; flex-wrap:wrap; margin:14px 0;}
+  .bench-size-control{display:flex; align-items:center; gap:8px; font-size:12px; color:var(--slate); font-weight:600; margin-top:6px;}
+  .bench-size-control input{
+    border:1px solid var(--line-strong); border-radius:7px; padding:5px 8px; font-size:13px; font-family:'Inter',sans-serif;
+  }
   .side-tab{
     padding:7px 16px; border-radius:999px; border:1px solid var(--line-strong);
     background:var(--panel); color:var(--pitch-deep); font-weight:700; font-size:13px;

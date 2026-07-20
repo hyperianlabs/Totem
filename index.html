@@ -199,6 +199,30 @@
   <p class="dob-hint">A head coach covers every side in their age group by default. Adding a coach for a specific side (A–E) overrides the head coach for that side only — everyone else still falls back to the head coach.</p>
   <div id="coachGrid" class="picks-grid"></div>
 
+  <div class="section-title" id="sec-fixtures">
+    <h2>Fixtures calendar</h2>
+    <span class="sub" id="fixturesSub">plan matches &amp; auto-build the best team per age group</span>
+  </div>
+  <div class="panel fixtures-panel">
+    <div class="calendar-head">
+      <button class="btn btn-ghost btn-small" id="calPrev">‹</button>
+      <div class="calendar-title" id="calTitle"></div>
+      <button class="btn btn-ghost btn-small" id="calNext">›</button>
+      <button class="btn btn-primary btn-small" id="btnAddFixture" style="margin-left:auto;">+ Add fixture</button>
+      <button class="btn btn-ghost btn-small" id="btnAddPractice">+ Add practice</button>
+    </div>
+    <div class="calendar-grid" id="calendarGrid"></div>
+  </div>
+
+  <div id="fixtureList" class="fixture-list"></div>
+  <div id="fixtureDetail"></div>
+
+  <div class="section-title" id="sec-practices">
+    <h2>Practice sessions</h2>
+    <span class="sub">attendance auto-updates the reliability rating</span>
+  </div>
+  <div id="practiceList" class="fixture-list"></div>
+
   <div class="section-title" id="sec-roster">
     <h2 id="rosterTitle">Roster</h2>
     <span class="sub">tap a card to rate</span>
@@ -227,33 +251,13 @@
     <h2>Team sides</h2>
     <span class="sub" id="sidesSub">players ranked into A–E sides by position &amp; age group</span>
   </div>
+  <div class="bench-size-control">
+    <label for="inBenchSize">Bench size for this sport:</label>
+    <input type="number" id="inBenchSize" min="0" max="30" style="width:70px;">
+  </div>
   <div class="sides-tabs" id="sidesAgeTabs"></div>
   <div class="coach-banner" id="sidesCoachBanner"></div>
   <div id="sidesBoard" class="sides-board"></div>
-
-  <div class="section-title" id="sec-fixtures">
-    <h2>Fixtures calendar</h2>
-    <span class="sub" id="fixturesSub">plan matches &amp; auto-build the best team per age group</span>
-  </div>
-  <div class="panel fixtures-panel">
-    <div class="calendar-head">
-      <button class="btn btn-ghost btn-small" id="calPrev">‹</button>
-      <div class="calendar-title" id="calTitle"></div>
-      <button class="btn btn-ghost btn-small" id="calNext">›</button>
-      <button class="btn btn-primary btn-small" id="btnAddFixture" style="margin-left:auto;">+ Add fixture</button>
-      <button class="btn btn-ghost btn-small" id="btnAddPractice">+ Add practice</button>
-    </div>
-    <div class="calendar-grid" id="calendarGrid"></div>
-  </div>
-
-  <div id="fixtureList" class="fixture-list"></div>
-  <div id="fixtureDetail"></div>
-
-  <div class="section-title" id="sec-practices">
-    <h2>Practice sessions</h2>
-    <span class="sub">attendance auto-updates the reliability rating</span>
-  </div>
-  <div id="practiceList" class="fixture-list"></div>
 
   <div class="section-title" id="sec-results">
     <h2>Results &amp; stats</h2>
@@ -455,6 +459,8 @@
       <div class="chip-check-row">
         <button type="button" class="btn btn-ghost btn-small" id="quickAddSwimming">+ Swimming</button>
         <button type="button" class="btn btn-ghost btn-small" id="quickAddAthletics">+ Athletics</button>
+        <button type="button" class="btn btn-ghost btn-small" id="quickAddRugby">+ Rugby</button>
+        <button type="button" class="btn btn-ghost btn-small" id="quickAddCricket">+ Cricket</button>
       </div>
       <p class="icon-picker-hint">Pre-built with the right events per age group — or set up any other sport manually below.</p>
     </div>
@@ -477,6 +483,11 @@
         <label class="chip-check"><input type="radio" name="newSportType" value="team" checked><span>Team (score-based)</span></label>
         <label class="chip-check"><input type="radio" name="newSportType" value="individual"><span>Individual (times/places)</span></label>
       </div>
+    </div>
+    <div class="field" id="newSportBenchField">
+      <label>Bench size</label>
+      <input type="number" id="newSportBenchSize" min="0" max="30" value="3" style="width:80px;">
+      <p class="icon-picker-hint">How many reserve players sit on the bench, in addition to starting positions above.</p>
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost btn-small" id="cancelSport">Cancel</button>

@@ -200,6 +200,18 @@ No migration needed — this lives entirely in the same JSON blob everything els
 
 **Worth deciding before you flip this on:** 270 days / 100 / 20 are starting recommendations, not fixed — easy to adjust via `FREE_PLAN_MAX_DAYS` and `FREE_PLAN_MAX_RESULTS_BY_TYPE` in `app.js` once you've seen real signup behavior.
 
+## Page layout, bench size, and Rugby/Cricket
+
+No migration needed for any of this — pure code changes.
+
+**Homepage order:** the Fixtures Calendar and Practice Sessions sections now sit right after Coaches, before Roster — was previously much further down the page.
+
+**Configurable bench size:** each sport now has its own bench size (previously a fixed 3 for everyone). Edit it any time from a small control right above the age-group tabs in **Team Sides** — applies immediately to every side for that sport.
+
+**Rugby and Cricket quick-add**, same pattern as Swimming/Athletics — a pre-built template in **Add sport → Quick add**. Two things worth knowing about how they're modeled:
+- **Rugby's two lock positions are listed separately** ("Lock 1" / "Lock 2") since Totem slots exactly one player per named position per side — a player who covers either just needs both ticked as playable positions when added to the roster. Bench defaults to 8.
+- **Cricket doesn't have fixed fielding positions** the way invasion sports do (fielding placement is tactical, not a fixed slot per player) — so this template uses **batting-order/role slots** instead (Opening Batsman 1/2, Batsman 3–5, All-rounder, Wicketkeeper, Bowler 1–4), the closest sensible fit to Totem's fixed-position model. If your team's roles work differently, adjust the position list freely via "manage positions" after adding it — it's a starting point, not a rulebook.
+
 ## If something doesn't work
 
 - **Login screen shows but login fails:** double check the email/password in Supabase → Authentication → Users, and that `config.js` has the correct URL/key (no extra quotes or spaces).

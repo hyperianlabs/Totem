@@ -525,11 +525,25 @@
   // that aren't age-group-aware) — the union of every event across all groups.
   const ATHLETICS_ALL_EVENTS = [...new Set(Object.values(ATHLETICS_EVENTS_BY_AGE_GROUP).flat())];
 
-  const SWIMMING_TEMPLATE = { id:"swimming", name:"Swimming", iconKey:"swimming", type:"individual", positions:["Freestyle","Backstroke","Breaststroke","Butterfly","Individual Medley"] };
-  const ATHLETICS_TEMPLATE = { id:"athletics", name:"Athletics", iconKey:"athletics", type:"individual", positions: ATHLETICS_ALL_EVENTS, eventsByAgeGroup: ATHLETICS_EVENTS_BY_AGE_GROUP };
+  const SWIMMING_TEMPLATE = { id:"swimming", name:"Swimming", iconKey:"swimming", type:"individual", positions:["Freestyle","Backstroke","Breaststroke","Butterfly","Individual Medley"], benchSize:3 };
+  const ATHLETICS_TEMPLATE = { id:"athletics", name:"Athletics", iconKey:"athletics", type:"individual", positions: ATHLETICS_ALL_EVENTS, eventsByAgeGroup: ATHLETICS_EVENTS_BY_AGE_GROUP, benchSize:3 };
+  // Rugby's two lock positions are listed separately (Lock 1 / Lock 2) since
+  // Totem slots exactly one player per named position per side — a player
+  // who covers either just needs both ticked as playable positions.
+  const RUGBY_TEMPLATE = { id:"rugby", name:"Rugby", iconKey:"rugby", type:"team",
+    positions:["Loosehead Prop","Hooker","Tighthead Prop","Lock 1","Lock 2","Blindside Flanker","Openside Flanker","Number 8","Scrum-half","Fly-half","Left Wing","Inside Centre","Outside Centre","Right Wing","Fullback"],
+    benchSize:8 };
+  // Cricket doesn't have fixed fielding positions the way invasion sports do
+  // (fielding placement is tactical and changes over by over) — so this
+  // template uses batting-order/role slots instead, the closest sensible fit
+  // to Totem's fixed-position-per-side model. Adjust freely via "manage
+  // positions" if your team's roles work differently.
+  const CRICKET_TEMPLATE = { id:"cricket", name:"Cricket", iconKey:"cricket", type:"team",
+    positions:["Opening Batsman 1","Opening Batsman 2","Batsman 3","Batsman 4","Batsman 5","All-rounder","Wicketkeeper","Bowler 1","Bowler 2","Bowler 3","Bowler 4"],
+    benchSize:4 };
   const DEFAULT_SPORTS = [
-    { id:"netball", name:"Netball", iconKey:"netball", type:"team", positions:["GS","GA","WA","C","WD","GD","GK"] },
-    { id:"hockey", name:"Field Hockey", iconKey:"hockey", type:"team", positions:["Goalkeeper","Right Back","Left Back","Right Half","Left Half","Right Wing","Centre Forward","Left Wing"] },
+    { id:"netball", name:"Netball", iconKey:"netball", type:"team", positions:["GS","GA","WA","C","WD","GD","GK"], benchSize:3 },
+    { id:"hockey", name:"Field Hockey", iconKey:"hockey", type:"team", positions:["Goalkeeper","Right Back","Left Back","Right Half","Left Half","Right Wing","Centre Forward","Left Wing"], benchSize:3 },
     JSON.parse(JSON.stringify(SWIMMING_TEMPLATE)),
     JSON.parse(JSON.stringify(ATHLETICS_TEMPLATE))
   ];
@@ -895,10 +909,12 @@
     return state.bench[benchKey(sportId, group, side)] || [];
   }
   function benchEditableHtml(sportId, group, side){
+    const sport = state.sports.find(s => s.id === sportId);
+    const benchSize = (sport && Number.isFinite(sport.benchSize)) ? sport.benchSize : 3;
     const bench = benchFor(sportId, group, side);
     const players = eligiblePlayersForSwap(sportId, group);
 
-    const rows = [0, 1, 2].map(i => {
+    const rows = Array.from({ length: benchSize }, (_, i) => i).map(i => {
       const current = bench[i] || "";
       const options = [`<option value="">— empty —</option>`]
         .concat(players.map(p => `<option value="${p.id}" ${current === p.id ? "selected" : ""}>${escapeHtml(p.name)} (${escapeHtml(playerPositions(p).join(", "))})</option>`))
@@ -914,7 +930,7 @@
     }).join("");
 
     return `<div class="bench-block">
-      <div class="bench-head">Bench <span class="bench-sub">up to 3 — picked manually</span></div>
+      <div class="bench-head">Bench <span class="bench-sub">up to ${benchSize} — picked manually</span></div>
       ${rows}
     </div>`;
   }
@@ -1508,6 +1524,7 @@
     const sport = currentSport();
     const noun = sportType(sport) === "individual" ? "event" : "position";
     document.getElementById("sidesSub").textContent = `players ranked into A–E sides by ${noun} & age group`;
+    document.getElementById("inBenchSize").value = Number.isFinite(sport.benchSize) ? sport.benchSize : 3;
     const groups = ageGroupsForSport(sport.id);
     const tabsEl = document.getElementById("sidesAgeTabs");
     const boardEl = document.getElementById("sidesBoard");
@@ -3105,6 +3122,14 @@
 
   document.getElementById("btnAddFixture").addEventListener("click", () => openAddFixtureModal());
   document.getElementById("btnAddPractice").addEventListener("click", () => openAddPracticeModal());
+  document.getElementById("inBenchSize").addEventListener("change", (e) => {
+    const sport = currentSport();
+    const val = +e.target.value;
+    sport.benchSize = Number.isFinite(val) && val >= 0 ? val : 3;
+    e.target.value = sport.benchSize;
+    saveState();
+    renderSides();
+  });
   let editingPracticeId = null;
 
   function openAddPracticeModal(practice){
@@ -3556,6 +3581,7 @@
     document.getElementById("sportModal").classList.add("open");
     document.getElementById("newSportName").value = "";
     document.getElementById("newSportPositions").value = "";
+    document.getElementById("newSportBenchSize").value = "3";
     const teamRadio = document.querySelector('input[name="newSportType"][value="team"]');
     if(teamRadio) teamRadio.checked = true;
     document.getElementById("newSportPositionsLabel").textContent = "Positions (comma separated)";
@@ -3584,6 +3610,8 @@
   }
   document.getElementById("quickAddSwimming").addEventListener("click", () => addSportFromTemplate(SWIMMING_TEMPLATE));
   document.getElementById("quickAddAthletics").addEventListener("click", () => addSportFromTemplate(ATHLETICS_TEMPLATE));
+  document.getElementById("quickAddRugby").addEventListener("click", () => addSportFromTemplate(RUGBY_TEMPLATE));
+  document.getElementById("quickAddCricket").addEventListener("click", () => addSportFromTemplate(CRICKET_TEMPLATE));
 
   document.getElementById("confirmSport").addEventListener("click", () => {
     if(planLimitReached("sports")){
@@ -3597,7 +3625,9 @@
     const id = name.toLowerCase().replace(/[^a-z0-9]+/g,"-") + "-" + uid().slice(0,4);
     const typeInput = document.querySelector('input[name="newSportType"]:checked');
     const type = typeInput ? typeInput.value : "team";
-    state.sports.push({ id, name, iconKey: selectedNewSportIcon, type, positions });
+    const benchSizeInput = +document.getElementById("newSportBenchSize").value;
+    const benchSize = Number.isFinite(benchSizeInput) && benchSizeInput >= 0 ? benchSizeInput : 3;
+    state.sports.push({ id, name, iconKey: selectedNewSportIcon, type, positions, benchSize });
     state.activeSport = id;
     document.getElementById("sportModal").classList.remove("open");
     saveState(); render();
