@@ -196,7 +196,7 @@
 
   .player-card{
     background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
-    padding:16px; position:relative; box-shadow:var(--shadow);
+    padding:16px; position:relative; box-shadow:var(--shadow); min-width:0;
     display:flex; flex-direction:column; gap:12px;
   }
   .player-card.pick{
@@ -236,7 +236,7 @@
   }
   .metric-row{display:flex; align-items:center; gap:10px;}
   .metric-row .m-label{font-size:12px; width:92px; flex-shrink:0; color:var(--slate); font-weight:600;}
-  .metric-row input[type=range]{flex:1; accent-color:var(--pitch);}
+  .metric-row input[type=range]{flex:1; min-width:0; accent-color:var(--pitch);}
   .metric-row .m-val{font-family:'JetBrains Mono',monospace; font-size:13px; width:22px; text-align:right; font-weight:700; color:var(--pitch-deep);}
 
   /* ===== Top picks panel ===== */
