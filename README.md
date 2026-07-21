@@ -242,4 +242,10 @@ No migration needed for any of this — pure code changes.
 - **Login screen shows but login fails:** double check the email/password in Supabase → Authentication → Users, and that `config.js` has the correct URL/key (no extra quotes or spaces).
 - **Logged in but the app looks empty / nothing saves:** the account isn't in `team_members` yet — re-run the insert snippet from Part 1 step 6 with that person's email.
 - **Blank page / console errors:** open browser dev tools (F12) → Console tab, most commonly a typo in `config.js`.
+## Automatic fixture-booking emails to coaches
+
+Run no migration for this — just deploy one new function: `supabase functions deploy send-fixture-email` (reuses your existing `RESEND_API_KEY`/`RESEND_FROM_ADDRESS` secrets, nothing new to set).
+
+**How it behaves:** every time a fixture is booked or edited, each relevant coach automatically gets emailed their team sheet(s) — opponent, date, time, venue, lineup, and bench. If a fixture books multiple sides (e.g. U10 A and U10 B), each side's coach gets their own email; if the *same* coach covers multiple sides in that fixture (e.g. a head coach), they get **one combined email** listing all their sides, not several separate ones. Editing a fixture later (date, venue, or which teams are playing) re-sends automatically to whoever's now relevant, so coaches always have the current version.
+
 - **Result emails don't arrive:** check Supabase Dashboard → Edge Functions → `send-result-email` → Logs for the actual error (missing secret, bad Resend key, or an unverified sending domain are the usual culprits).

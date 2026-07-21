@@ -3199,6 +3199,47 @@
   // NOTE: this is a UI preview only — sending real email requires a backend
   // (see the chat writeup for how this plugs into Supabase).
   // ---------- result notification email (real send via Edge Function) ----------
+  async function notifyFixtureCoaches(sport, fixture){
+    // Group entries by coach email so a coach covering multiple sides of
+    // this fixture gets one combined email, not several separate ones.
+    const byCoach = {}; // email -> { coachName, sides: [...] }
+    fixture.entries.forEach(en => {
+      const coach = coachFor(sport.id, en.ageGroup, en.side);
+      if(!coach || !coach.email) return;
+      const label = seniorSideLabel(sport, en.ageGroup, en.side) || `${en.ageGroup} ${en.side}`;
+      const excludeIds = unavailableIdsFor(fixture.id);
+      const { rows, bench } = collectTeamSheetRows(sport.id, en.ageGroup, en.side, excludeIds);
+      const key = coach.email.toLowerCase().trim();
+      if(!byCoach[key]) byCoach[key] = { coachEmail: coach.email, coachName: coach.name, sides: [] };
+      byCoach[key].sides.push({ sideLabel: label, rows, bench });
+    });
+
+    const coachEntries = Object.values(byCoach);
+    if(coachEntries.length === 0) return;
+
+    let sentCount = 0;
+    for(const entry of coachEntries){
+      const payload = {
+        sportName: sport.name,
+        opponent: fixture.opponent,
+        date: fixture.date,
+        time: fixture.time ? formatFixtureTime(fixture.time) : null,
+        venue: fixture.venue || null,
+        coachEmail: entry.coachEmail,
+        coachName: entry.coachName,
+        sides: entry.sides
+      };
+      try{
+        const { error } = await supabaseClient.functions.invoke("send-fixture-email", { body: payload });
+        if(error) throw error;
+        sentCount++;
+      }catch(e){
+        console.warn("Totem: fixture email failed for", entry.coachEmail, "—", e);
+      }
+    }
+    if(sentCount > 0) showToast(`Team sheet emailed to ${sentCount} coach${sentCount === 1 ? "" : "es"}.`);
+  }
+
   async function sendResultNotification(sport, fixture, result, warningPrefix){
     const notifyCoach = coachFor(result.sportId, result.ageGroup, result.side);
     const resultLabel = seniorSideLabel(sport, result.ageGroup, result.side) || `${result.ageGroup} ${result.side}`;
@@ -3538,6 +3579,8 @@
     if(!date){ alert("Pick a date."); return; }
     if(!label){ alert(type === "trial" ? "Enter a name for the trial." : "Enter the opponent's name."); return; }
 
+    let savedFixture = null;
+
     if(type === "trial"){
       const ageGroups = Array.from(document.querySelectorAll("#fxAgeGroups input[type=checkbox]:checked")).map(cb => cb.dataset.group);
       if(ageGroups.length === 0){ alert("Select at least one age group."); return; }
@@ -3580,8 +3623,10 @@
           });
         }
         fixture.date = date; fixture.time = time; fixture.opponent = label; fixture.venue = venue; fixture.entries = entries;
+        savedFixture = fixture;
       } else {
-        state.fixtures.push({ id: uid(), sportId: sport.id, date, time, opponent: label, venue, entries });
+        savedFixture = { id: uid(), sportId: sport.id, date, time, opponent: label, venue, entries };
+        state.fixtures.push(savedFixture);
       }
     }
 
@@ -3589,6 +3634,7 @@
     document.getElementById("fixtureModal").classList.remove("open");
     saveState();
     renderCalendar(); renderFixtureList(); renderFixtureDetail(); renderSides(); renderDashboard();
+    if(savedFixture) notifyFixtureCoaches(sport, savedFixture);
   });
 
   // ---------- sport icons ----------
