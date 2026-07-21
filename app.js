@@ -2892,6 +2892,7 @@
         th{padding:8px 10px; text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:#5B6B63; border-bottom:2px solid #14201A;}
         th.mark-col{width:36px; text-align:center;}
         .footer{margin-top:36px; font-size:10px; color:#999;}
+        @page{ size: A4; margin: 15mm; }
         @media print{ body{padding:0;} }
       </style></head><body>
       <div class="print-header">
@@ -2928,6 +2929,7 @@
         td:first-child{font-weight:700; width:130px; color:#5B6B63; text-transform:uppercase; font-size:11px; letter-spacing:0.04em;}
         .bench{margin-top:22px; font-size:13px; color:#5B6B63;}
         .footer{margin-top:36px; font-size:10px; color:#999;}
+        @page{ size: A4; margin: 15mm; }
         @media print{ body{padding:0;} }
       </style></head><body>
       <div class="print-header">
@@ -3010,6 +3012,7 @@
         th{text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:#5B6B63; padding:6px 10px; border-bottom:2px solid #ddd;}
         td{padding:9px 10px; border-bottom:1px solid #ddd; font-size:14px;}
         .footer{margin-top:36px; font-size:10px; color:#999;}
+        @page{ size: A4; margin: 15mm; }
         @media print{ body{padding:0;} }
       </style></head><body>
       <div class="print-header">
@@ -3113,6 +3116,7 @@
         th{text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:#5B6B63; padding:6px 10px; border-bottom:2px solid #ddd;}
         td{padding:8px 10px; border-bottom:1px solid #ddd; font-size:13px;}
         .footer{margin-top:36px; font-size:10px; color:#999;}
+        @page{ size: A4; margin: 15mm; }
         @media print{ body{padding:0;} }
       </style></head><body>
       <div class="print-header">
