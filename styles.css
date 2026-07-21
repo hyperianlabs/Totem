@@ -647,7 +647,7 @@
 .emblem-upload-actions{display:flex; flex-direction:column; gap:6px;}
 
 .header-account{
-  position:absolute; top:20px; right:28px; z-index:6;
+  position:absolute; top:20px; right:28px; z-index:50;
   font-size:12px; color:#CFE3D6;
 }
 .account-trigger{
@@ -657,7 +657,7 @@
 }
 .account-trigger:hover{background:rgba(255,255,255,0.2);}
 .account-dropdown{
-  position:absolute; top:calc(100% + 8px); right:0; z-index:10;
+  position:absolute; top:calc(100% + 8px); right:0; z-index:51;
   background:var(--panel); border:1px solid var(--line); border-radius:10px;
   box-shadow:0 10px 30px rgba(0,0,0,0.2); padding:8px; min-width:170px;
   display:flex; flex-direction:column; gap:4px;
@@ -671,5 +671,5 @@
 .account-dropdown button:hover{background:var(--chalk);}
 #btnLogout{color:var(--clay);}
 @media (max-width:600px){
-  .header-account{position:relative; z-index:5; margin-bottom:10px; display:flex; justify-content:flex-end;}
+  .header-account{position:relative; z-index:50; margin-bottom:10px; display:flex; justify-content:flex-end;}
 }
