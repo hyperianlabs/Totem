@@ -580,6 +580,11 @@
     .field.grow{min-width:0;}
     .cal-cell{min-height:56px;}
     .calendar-title{min-width:0;}
+    .field input, .field select, .field textarea{width:100% !important; min-width:0 !important;}
+    .quicknav{padding:9px 16px;}
+    .modal{padding:18px;}
+    .side-head{gap:6px;}
+    .bench-size-control{flex-wrap:wrap;}
   }
 
 /* ===== Auth screen ===== */
