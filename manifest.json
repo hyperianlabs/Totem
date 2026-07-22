@@ -1,0 +1,16 @@
+{
+  "name": "Totem — Team Selection",
+  "short_name": "Totem",
+  "description": "Build your team, block by block. Multi-sport team selection and management for schools and clubs.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#EFF2ED",
+  "theme_color": "#0A1C2C",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
