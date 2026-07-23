@@ -458,6 +458,11 @@
         <input type="checkbox" id="renameClubConsentCheck"><span class="consent-check-text">We have, or will put in place, a process for obtaining parental/guardian consent before entering a child's information into Totem. See our <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a> and <a href="parental-consent-form-template.docx" target="_blank" rel="noopener">consent form template</a>.</span>
       </label>
     </div>
+    <div class="field danger-zone" id="deleteClubField" style="display:none;">
+      <label>Danger zone</label>
+      <p class="icon-picker-hint">Permanently deletes this club and everything in it — players, fixtures, results, coaches. This cannot be undone, and cannot be recovered by anyone, including support.</p>
+      <button class="btn btn-danger btn-small" id="btnDeleteClub" type="button">Delete this club permanently</button>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-ghost btn-small" id="cancelRenameClub">Cancel</button>
       <button class="btn btn-primary btn-small" id="confirmRenameClub">Save</button>

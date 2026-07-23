@@ -642,6 +642,9 @@
 .consent-status-box.confirmed{background:#EAF3EE; color:var(--pitch-deep); border:1px solid #CFE3D6;}
 .consent-status-box.unconfirmed{background:#FBE9E4; color:var(--clay); border:1px solid #F0C4B6;}
 
+.danger-zone{border:1px solid #F0C4B6; border-radius:10px; padding:14px; margin-top:8px; background:#FFF9F8;}
+.danger-zone label{color:var(--clay); font-weight:700;}
+
 .emblem-upload-row{display:flex; align-items:center; gap:14px;}
 .emblem-preview{
   width:64px; height:64px; border-radius:9px; border:1px dashed var(--line-strong);

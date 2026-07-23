@@ -300,6 +300,7 @@
     const typeRadio = document.querySelector(`input[name="renameClubType"][value="${currentOrgType || "club"}"]`);
     if(typeRadio) typeRadio.checked = true;
     document.getElementById("renameClubModal").classList.add("open");
+    document.getElementById("deleteClubField").style.display = "";
     loadStaffList();
     renderConsentStatus();
     renderEmblemPreview();
@@ -465,6 +466,38 @@
       });
     });
   }
+
+  document.getElementById("btnDeleteClub").addEventListener("click", async () => {
+    const { data: staffData } = await supabaseClient.from("team_members").select("email").eq("org_id", currentOrgId);
+    const otherStaffCount = (staffData || []).filter(s => (s.email || "").toLowerCase() !== (currentUser.email || "").toLowerCase()).length;
+
+    const playerCount = state.players.length;
+    const fixtureCount = state.fixtures.length + state.trials.length;
+    const resultCount = state.results.length + state.trialResults.length;
+    const summary = [
+      playerCount ? `${playerCount} player${playerCount === 1 ? "" : "s"}` : null,
+      fixtureCount ? `${fixtureCount} fixture${fixtureCount === 1 ? "" : "s"}/trial${fixtureCount === 1 ? "" : "s"}` : null,
+      resultCount ? `${resultCount} captured result${resultCount === 1 ? "" : "s"}` : null
+    ].filter(Boolean).join(", ");
+
+    let warning = `Permanently delete "${currentOrgName}"?`;
+    if(summary) warning += `\n\nThis deletes everything: ${summary}.`;
+    if(otherStaffCount > 0) warning += `\n\n${otherStaffCount} other staff member${otherStaffCount === 1 ? "" : "s"} will immediately lose access — their logins aren't deleted, just their access to this club.`;
+    warning += `\n\nThis cannot be undone by you, or by anyone else, including support.`;
+
+    if(!confirm(warning + "\n\nContinue?")) return;
+    if(prompt(`Type "${currentOrgName}" exactly to confirm permanent deletion:`) !== currentOrgName){
+      alert("Name didn't match — nothing was deleted.");
+      return;
+    }
+
+    const { error } = await supabaseClient.from("organizations").delete().eq("id", currentOrgId);
+    if(error){ alert("Could not delete your club — " + error.message); return; }
+
+    alert(`"${currentOrgName}" has been permanently deleted.`);
+    await supabaseClient.auth.signOut();
+    showAuth();
+  });
 
   document.getElementById("cancelRenameClub").addEventListener("click", () => {
     document.getElementById("renameClubModal").classList.remove("open");

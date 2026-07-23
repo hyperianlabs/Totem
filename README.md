@@ -237,6 +237,12 @@ No migration needed for any of this — pure code changes.
 - **Rugby's two lock positions are listed separately** ("Lock 1" / "Lock 2") since Totem slots exactly one player per named position per side — a player who covers either just needs both ticked as playable positions when added to the roster. Bench defaults to 8.
 - **Cricket doesn't have fixed fielding positions** the way invasion sports do (fielding placement is tactical, not a fixed slot per player) — so this template uses **batting-order/role slots** instead (Opening Batsman 1/2, Batsman 3–5, All-rounder, Wicketkeeper, Bowler 1–4), the closest sensible fit to Totem's fixed-position model. If your team's roles work differently, adjust the position list freely via "manage positions" after adding it — it's a starting point, not a rulebook.
 
+## Letting a club owner delete their own club
+
+Run `migration-owner-delete.sql` once. Previously only you (Platform Admin) could delete a club — this adds the same ability for that club's own owner, strictly scoped to their own organization (reuses the `is_org_owner()` permission check already built for staff management, so an owner can never delete anyone else's club, only their own).
+
+**Where to find it:** Club Settings → scroll to the red "Danger zone" box at the bottom. Shows exactly what'll be deleted (player/fixture/result counts), warns clearly if other staff will lose access, and requires typing the club's name exactly to confirm — same pattern as every other destructive action in this app. Deletion cascades automatically to all that club's data (players, fixtures, results, coaches) since those tables already have `on delete cascade` set up — nothing extra to clean up.
+
 ## If something doesn't work
 
 - **Login screen shows but login fails:** double check the email/password in Supabase → Authentication → Users, and that `config.js` has the correct URL/key (no extra quotes or spaces).
