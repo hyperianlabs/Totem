@@ -596,8 +596,7 @@
        a scrollbar with no edge affordance just looked like a cut-off,
        broken layout rather than an intentional "swipe for more" pattern. */
     .quicknav{
-      position:static; overflow-x:visible; flex-wrap:wrap; padding:10px 16px;
-      box-shadow:none; border-bottom:1px solid var(--line);
+      overflow-x:visible; flex-wrap:wrap; padding:10px 16px;
     }
     .quicknav button{flex-shrink:0;}
 
@@ -701,5 +700,5 @@
 .account-dropdown button:hover{background:var(--chalk);}
 #btnLogout{color:var(--clay);}
 @media (max-width:900px){
-  .header-account{position:relative; z-index:50; margin-bottom:16px; display:flex; justify-content:flex-end;}
+  .header-account{position:relative; z-index:50; margin-bottom:16px; display:flex; justify-content:flex-start;}
 }
