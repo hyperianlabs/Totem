@@ -157,8 +157,9 @@
   .field input, .field select, .field textarea{
     border:1px solid var(--line-strong); border-radius:7px; padding:9px 10px;
     font-size:14px; font-family:'Inter',sans-serif; background:var(--chalk);
-    min-width:120px;
+    min-width:120px; height:40px; box-sizing:border-box; vertical-align:middle;
   }
+  .field textarea{height:auto; min-height:40px;}
   .field input:focus, .field select:focus, .field textarea:focus{outline:2px solid var(--pitch-light); outline-offset:1px;}
   .field textarea{width:100%; resize:vertical;}
   .field.grow{flex:1; min-width:160px;}
@@ -573,7 +574,7 @@
   }
   .toast.show{opacity:1; transform:translateY(0);}
 
-  @media (max-width:600px){
+  @media (max-width:900px){
     header.top{padding:18px 16px;}
     main{padding:18px 16px 40px;}
     .add-form{flex-direction:column; align-items:stretch;}
@@ -581,10 +582,25 @@
     .cal-cell{min-height:56px;}
     .calendar-title{min-width:0;}
     .field input, .field select, .field textarea{width:100% !important; min-width:0 !important;}
-    .quicknav{padding:9px 16px;}
     .modal{padding:18px;}
     .side-head{gap:6px;}
     .bench-size-control{flex-wrap:wrap;}
+
+    /* Quicknav: wrap into multiple rows instead of scrolling horizontally —
+       a scrollbar with no edge affordance just looked like a cut-off,
+       broken layout rather than an intentional "swipe for more" pattern. */
+    .quicknav{
+      position:static; overflow-x:visible; flex-wrap:wrap; padding:10px 16px;
+      box-shadow:none; border-bottom:1px solid var(--line);
+    }
+    .quicknav button{flex-shrink:0;}
+
+    /* More breathing room between the account menu and the club badge —
+       on mobile .header-account drops into normal flow directly above
+       the logo/badge row, and the default gap was too tight. Actual
+       margin-bottom is set in the .header-account position rule below,
+       to avoid two rules fighting over the same property. */
+    .brand-row{flex-wrap:wrap; row-gap:8px;}
   }
 
 /* ===== Auth screen ===== */
@@ -678,6 +694,6 @@
 }
 .account-dropdown button:hover{background:var(--chalk);}
 #btnLogout{color:var(--clay);}
-@media (max-width:600px){
-  .header-account{position:relative; z-index:50; margin-bottom:10px; display:flex; justify-content:flex-end;}
+@media (max-width:900px){
+  .header-account{position:relative; z-index:50; margin-bottom:16px; display:flex; justify-content:flex-end;}
 }
