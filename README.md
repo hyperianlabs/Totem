@@ -243,6 +243,8 @@ Run `migration-owner-delete.sql` once. Previously only you (Platform Admin) coul
 
 **Where to find it:** Club Settings → scroll to the red "Danger zone" box at the bottom. Shows exactly what'll be deleted (player/fixture/result counts), warns clearly if other staff will lose access, and requires typing the club's name exactly to confirm — same pattern as every other destructive action in this app. Deletion cascades automatically to all that club's data (players, fixtures, results, coaches) since those tables already have `on delete cascade` set up — nothing extra to clean up.
 
+**Deleting the actual logins too, not just the club data.** Deploy `delete-org-users` (`supabase functions deploy delete-org-users`, no new secrets needed). Without this, a deleted club's data is gone but the underlying login for anyone who was staff there still exists — meaning their email is silently "stuck," unable to sign up again cleanly, since Supabase sees it as already registered. This function runs right before the club itself is deleted (called automatically from both the owner's Danger Zone and Platform Admin's delete), and removes the actual login for anyone whose *only* club was the one being deleted — freeing their email to register fresh. If someone also belongs to a different club, their login is deliberately left alone, so deleting one club never locks them out of another.
+
 ## Branded, reliable auth emails (signup confirmation, password reset)
 
 No migration needed — just a new Edge Function and one Supabase dashboard setting.

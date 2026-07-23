@@ -458,9 +458,21 @@
     listEl.querySelectorAll("[data-admin-delete]").forEach(btn => {
       btn.addEventListener("click", async () => {
         const name = btn.dataset.name;
-        if(!confirm(`Permanently delete "${name}"?\n\nThis removes the club and ALL its data (players, fixtures, results — everything). Staff logins themselves are not deleted, just their access to this club. This cannot be undone.`)) return;
+        const orgId = btn.dataset.adminDelete;
+        if(!confirm(`Permanently delete "${name}"?\n\nThis removes the club and ALL its data (players, fixtures, results — everything). Staff whose only club this is will have their login deleted too, freeing their email to sign up fresh elsewhere. Anyone who also belongs to another club keeps their login. This cannot be undone.`)) return;
         if(prompt(`Type the club's name exactly to confirm deletion:`) !== name) { alert("Name didn't match — nothing was deleted."); return; }
-        const { error } = await supabaseClient.from("organizations").delete().eq("id", btn.dataset.adminDelete);
+
+        const { data: { session } } = await supabaseClient.auth.getSession();
+        try{
+          await supabaseClient.functions.invoke("delete-org-users", {
+            body: { org_id: orgId },
+            headers: { Authorization: `Bearer ${session.access_token}` }
+          });
+        }catch(e){
+          console.warn("Totem: could not clean up staff logins before deleting club —", e);
+        }
+
+        const { error } = await supabaseClient.from("organizations").delete().eq("id", orgId);
         if(error){ alert("Could not delete — " + error.message); return; }
         loadPlatformAdminList();
       });
@@ -482,13 +494,25 @@
 
     let warning = `Permanently delete "${currentOrgName}"?`;
     if(summary) warning += `\n\nThis deletes everything: ${summary}.`;
-    if(otherStaffCount > 0) warning += `\n\n${otherStaffCount} other staff member${otherStaffCount === 1 ? "" : "s"} will immediately lose access — their logins aren't deleted, just their access to this club.`;
+    if(otherStaffCount > 0) warning += `\n\n${otherStaffCount} other staff member${otherStaffCount === 1 ? "" : "s"} will immediately lose access. If this is their only club, their login is deleted too — freeing their email to sign up fresh elsewhere. Anyone who also belongs to another club keeps their login.`;
+    else warning += `\n\nYour login will be deleted too, unless you also belong to another club — freeing your email to sign up fresh if you ever want to.`;
     warning += `\n\nThis cannot be undone by you, or by anyone else, including support.`;
 
     if(!confirm(warning + "\n\nContinue?")) return;
     if(prompt(`Type "${currentOrgName}" exactly to confirm permanent deletion:`) !== currentOrgName){
       alert("Name didn't match — nothing was deleted.");
       return;
+    }
+
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    try{
+      await supabaseClient.functions.invoke("delete-org-users", {
+        body: { org_id: currentOrgId },
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+    }catch(e){
+      console.warn("Totem: could not clean up staff logins before deleting club —", e);
+      // Not fatal — the club itself still gets deleted below either way.
     }
 
     const { error } = await supabaseClient.from("organizations").delete().eq("id", currentOrgId);
