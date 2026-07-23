@@ -268,6 +268,10 @@ Run `migration-signup-source.sql` once. Every team sheet, result, and season sum
 
 **How the tracking actually works:** clicking a tagged link stores the source in the visitor's browser. If they later create a new club — even days afterward, not necessarily the same visit — that source is attached to the new organization automatically. You can see it in **Platform Admin**, right next to each club (e.g. "· via whatsapp_sheet") — real evidence of whether this channel is actually converting, not a guess.
 
+## Roadmap — not built yet, worth revisiting later
+
+**Offline capture for attendance & results.** Coaches taking attendance or capturing a result on a field with no signal currently just fails — there's no local queue or auto-sync yet. Worth building once there's real evidence it's actually costing someone data (a coach genuinely losing a captured result), rather than pre-emptively — right now, growing the customer base matters more than smoothing this edge case. Scoped narrowly to just attendance + results if/when it's built, not the whole app, since those are the two actions most likely to happen with zero signal and least likely to have two people editing the same thing at once.
+
 ## If something doesn't work
 
 
