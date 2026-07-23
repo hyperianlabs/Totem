@@ -258,7 +258,18 @@ No migration needed — just a new Edge Function and one Supabase dashboard sett
 
 **One thing worth knowing:** once this hook is enabled, it fully replaces Supabase's email sending for *every* auth action — signup, password reset, magic link, email change — all route through this one function. If it ever fails (bad Resend key, function not deployed), the triggering action fails too, by design — Supabase won't silently let someone "sign up" without actually being able to send their confirmation email.
 
+## Turning shared team sheets into a growth loop
+
+Run `migration-signup-source.sql` once. Every team sheet, result, and season summary already gets shared far beyond your existing customers — to parents, opposing teams, other coaches — but until now that reach wasn't doing anything for growth. This adds a tracked "Build your team on Totem" link to every shared piece of content, and records where a new signup actually came from.
+
+**Where the link appears:**
+- WhatsApp team sheet shares — a real clickable link, tagged `ref=whatsapp_sheet`
+- Printed team sheets, results, season summaries, and attendance registers — a visible URL in the footer (`totem.hyperianlabs.com`), since a printed page can't carry a clickable tracking link the same way
+
+**How the tracking actually works:** clicking a tagged link stores the source in the visitor's browser. If they later create a new club — even days afterward, not necessarily the same visit — that source is attached to the new organization automatically. You can see it in **Platform Admin**, right next to each club (e.g. "· via whatsapp_sheet") — real evidence of whether this channel is actually converting, not a guess.
+
 ## If something doesn't work
+
 
 - **Login screen shows but login fails:** double check the email/password in Supabase → Authentication → Users, and that `config.js` has the correct URL/key (no extra quotes or spaces).
 - **Logged in but the app looks empty / nothing saves:** the account isn't in `team_members` yet — re-run the insert snippet from Part 1 step 6 with that person's email.
