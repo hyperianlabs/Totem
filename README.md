@@ -243,6 +243,19 @@ Run `migration-owner-delete.sql` once. Previously only you (Platform Admin) coul
 
 **Where to find it:** Club Settings → scroll to the red "Danger zone" box at the bottom. Shows exactly what'll be deleted (player/fixture/result counts), warns clearly if other staff will lose access, and requires typing the club's name exactly to confirm — same pattern as every other destructive action in this app. Deletion cascades automatically to all that club's data (players, fixtures, results, coaches) since those tables already have `on delete cascade` set up — nothing extra to clean up.
 
+## Branded, reliable auth emails (signup confirmation, password reset)
+
+No migration needed — just a new Edge Function and one Supabase dashboard setting.
+
+**Why this exists:** Supabase's default built-in email sender is genuinely not meant for production — it's capped at 2 emails/hour project-wide, and only reliably delivers to addresses already on your Supabase project's team. A real outside signup (any new school) may not get their confirmation email at all on the default sender. This routes auth emails through the same Resend account already used for result/fixture emails instead — proper deliverability, and Totem-branded rather than a generic Supabase template.
+
+1. Deploy: `supabase functions deploy auth-send-email --no-verify-jwt`
+2. In Supabase Dashboard → **Authentication → Hooks**, find **"Send Email"**, switch it on, choose **HTTPS**, and point it at `https://YOUR-PROJECT-REF.supabase.co/functions/v1/auth-send-email`. Supabase generates a secret for you at this step — copy it (starts with `v1,whsec_`).
+3. Set it: `supabase secrets set SEND_EMAIL_HOOK_SECRET=v1,whsec_...` (reuses your existing `RESEND_API_KEY`/`RESEND_FROM_ADDRESS`, nothing new to set there)
+4. Test with a real signup or "forgot password" and confirm a Totem-branded email arrives instead of Supabase's default one
+
+**One thing worth knowing:** once this hook is enabled, it fully replaces Supabase's email sending for *every* auth action — signup, password reset, magic link, email change — all route through this one function. If it ever fails (bad Resend key, function not deployed), the triggering action fails too, by design — Supabase won't silently let someone "sign up" without actually being able to send their confirmation email.
+
 ## If something doesn't work
 
 - **Login screen shows but login fails:** double check the email/password in Supabase → Authentication → Users, and that `config.js` has the correct URL/key (no extra quotes or spaces).
