@@ -480,10 +480,16 @@
       <p class="icon-picker-hint">Removing someone here revokes their access to this club's data — it doesn't delete their login entirely.</p>
     </div>
     <div class="field">
+      <label>Consent &amp; indemnity</label>
+      <p class="icon-picker-hint">Guardians are emailed automatically to sign POPIA consent and the transport indemnity when a player is added. Anyone not yet signed can be sent a request below.</p>
+      <div id="consentRegisterList" class="staff-list"></div>
+      <button class="btn btn-ghost btn-small" id="btnSendAllConsent" type="button" style="margin-top:10px;">Send to everyone who hasn't signed</button>
+    </div>
+    <div class="field">
       <label>Data &amp; privacy</label>
       <div class="consent-status-box" id="consentStatusBox"></div>
       <label class="consent-check" style="margin-top:8px;">
-        <input type="checkbox" id="renameClubConsentCheck"><span class="consent-check-text">We have, or will put in place, a process for obtaining parental/guardian consent before entering a child's information into Totem. See our <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a> and <a href="parental-consent-form-template.docx" target="_blank" rel="noopener">consent form template</a>.</span>
+        <input type="checkbox" id="renameClubConsentCheck"><span class="consent-check-text">Consent is collected digitally per player above. See our <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a> for full details.</span>
       </label>
     </div>
     <div class="field danger-zone" id="deleteClubField" style="display:none;">

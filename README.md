@@ -330,6 +330,22 @@ Instead, a "Not available" response shows up clearly in the fixture's **Bus regi
 
 The Bus Register (on any away fixture) now has a live "On the bus" checkbox next to everyone who confirmed Bus transport — tick it as each player actually boards, and the "X / Y on the bus" count updates immediately, right there on your phone or laptop at the bus. There's also a **Print bus register** button for a physical, paper checklist covering just the bus riders, same style as your existing practice attendance sheets, useful as a backup or for whoever's actually standing at the door.
 
+## Digital consent & transport indemnity
+
+**⚠️ Before this goes live: the indemnity wording is a draft, not final legal text.** The POPIA consent section reuses your existing, already-drafted wording from `parental-consent-form-template.docx`. The transport indemnity section is new — I wrote reasonable, commonly-structured wording, but it has **not** been reviewed by a lawyer, and the on-page text itself says so clearly to every guardian who sees it. Get this reviewed before relying on it for real. This is the same category of thing already flagged elsewhere in this project (see `privacy.html`'s bracketed placeholders) — I can build the mechanism, but I shouldn't be the one writing binding legal language.
+
+**New migration:** `migration-consent-records.sql` — same secure, token-based pattern as the transport response system: guardians never log in, the table has zero direct public access, everything goes through a dedicated Edge Function enforcing an exact token match.
+
+**Two new functions:**
+```
+supabase functions deploy consent-response --no-verify-jwt
+supabase functions deploy send-consent-request-email
+```
+
+**How it works:** adding a new player now automatically emails their guardian a link to review and electronically sign both the POPIA consent and the transport indemnity — no login needed, just read the two short sections, type their full name as a signature, and submit. The moment they do, whoever's listed as head coach for that sport/age-group gets notified by email automatically (falling back to whoever added the player, if no coach is assigned yet).
+
+This replaces the old Word-doc process, as agreed — **Club Settings → Consent & indemnity** now shows every player's status (Signed / Sent, awaiting signature / Not sent yet), with a **"Send to everyone who hasn't signed"** button that covers your whole existing roster in one click, not just new players going forward. Re-sending to someone who already has a pending, unsigned request reuses their same link rather than creating a duplicate.
+
 ## Roadmap — not built yet, worth revisiting later
 
 **Offline capture for attendance & results.** Coaches taking attendance or capturing a result on a field with no signal currently just fails — there's no local queue or auto-sync yet. Worth building once there's real evidence it's actually costing someone data (a coach genuinely losing a captured result), rather than pre-emptively — right now, growing the customer base matters more than smoothing this edge case. Scoped narrowly to just attendance + results if/when it's built, not the whole app, since those are the two actions most likely to happen with zero signal and least likely to have two people editing the same thing at once.

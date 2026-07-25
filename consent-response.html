@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Consent & indemnity — Totem™</title>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0A1C2C; --pitch:#1F5C43; --pitch-deep:#123527; --mint:#30EFC6;
+    --chalk:#EFF2ED; --ink:#14201A; --slate:#5B6B63; --line:#DBDFD5; --clay:#C1542E;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--chalk); color:var(--ink); font-family:'Inter',sans-serif;
+    min-height:100vh; padding:20px; -webkit-font-smoothing:antialiased;
+  }
+  .card{
+    background:#fff; border-radius:16px; box-shadow:0 20px 50px rgba(20,32,26,0.12);
+    max-width:560px; width:100%; margin:0 auto; padding:32px 28px;
+  }
+  .wordmark{font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:0.03em; color:var(--navy); margin-bottom:20px; text-align:center;}
+  h1{font-size:20px; margin-bottom:4px;}
+  .context{font-size:14px; color:var(--slate); margin-bottom:20px;}
+  h2{font-size:15px; margin:22px 0 8px; color:var(--pitch-deep);}
+  .doc-section{
+    background:var(--chalk); border:1px solid var(--line); border-radius:10px; padding:16px 18px;
+    font-size:13.5px; line-height:1.7; color:var(--ink); max-height:220px; overflow-y:auto; margin-bottom:6px;
+  }
+  .doc-section p{margin-bottom:10px;}
+  .doc-section p:last-child{margin-bottom:0;}
+  .doc-section ul{margin:0 0 10px 18px;}
+  .draft-note{font-size:11px; color:var(--clay); font-weight:700; margin-bottom:14px;}
+  .field{margin:18px 0 0;}
+  .field label{display:block; font-size:12px; font-weight:700; color:var(--slate); text-transform:uppercase; letter-spacing:0.03em; margin-bottom:6px;}
+  .field input{width:100%; border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:14px; font-family:'Inter',sans-serif;}
+  .agree-row{display:flex; gap:10px; align-items:flex-start; margin-top:22px; padding:14px; background:var(--chalk); border-radius:10px;}
+  .agree-row input{margin-top:3px; flex-shrink:0;}
+  .agree-row label{font-size:13.5px; line-height:1.5;}
+  .btn{
+    display:block; width:100%; border:none; border-radius:10px; padding:15px; margin-top:22px;
+    font-size:15px; font-weight:700; cursor:pointer; font-family:'Inter',sans-serif;
+    background:var(--pitch); color:#fff;
+  }
+  .btn:disabled{opacity:0.5; cursor:not-allowed;}
+  .status{font-size:14px; padding:14px; border-radius:10px; margin-top:16px;}
+  .status.error{background:#FBE9E4; color:var(--clay);}
+  .status.success{background:rgba(48,239,198,0.15); color:var(--pitch-deep);}
+  .loading{color:var(--slate); font-size:14px; padding:20px 0; text-align:center;}
+  .already{font-size:13px; color:var(--slate); margin-top:14px; text-align:center;}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="wordmark">TOTEM<span style="color:var(--mint);">™</span></div>
+  <div id="content">
+    <p class="loading">Loading…</p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+(function(){
+  "use strict";
+  const supabaseClient = window.supabase.createClient(
+    window.TOTEM_CONFIG.SUPABASE_URL,
+    window.TOTEM_CONFIG.SUPABASE_ANON_KEY
+  );
+  const content = document.getElementById("content");
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("token");
+
+  function escapeHtml(str){
+    return String(str).replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+  }
+
+  function renderError(message){
+    content.innerHTML = `<div class="status error">${escapeHtml(message)}</div>`;
+  }
+
+  function renderForm(data){
+    const orgName = escapeHtml(data.org_name);
+    const alreadyNote = data.signed
+      ? `<p class="already">Already signed by <strong>${escapeHtml(data.signature_name || "")}</strong> on ${new Date(data.signed_at).toLocaleDateString()}. Submitting again below will update this record.</p>`
+      : "";
+
+    content.innerHTML = `
+      <h1>Consent & indemnity — ${escapeHtml(data.player_name)}</h1>
+      <p class="context">${orgName} · ${escapeHtml(data.sport_name)}</p>
+
+      <h2>1. Consent to process your child's information (POPIA)</h2>
+      <div class="doc-section">
+        <p>${orgName} uses Totem, a team-selection and results platform, to manage rosters, fixtures, and match results. To register your child as a player, we need your consent to process their personal information, in line with South Africa's Protection of Personal Information Act (POPIA).</p>
+        <p><strong>What's collected:</strong></p>
+        <ul>
+          <li>Name and date of birth (used to determine age-group eligibility)</li>
+          <li>Sport, position, and coach performance ratings (used for team selection)</li>
+          <li>Fitness metrics such as VO2 max, if provided (optional)</li>
+          <li>Match/fixture participation and results history</li>
+        </ul>
+        <p><strong>Who can see it:</strong> only staff and coaches at ${orgName} with a Totem login for this club. It is not shared publicly or sold to third parties.</p>
+        <p>You may withdraw this consent at any time by contacting ${orgName} directly. Withdrawing may affect your child's ability to be selected for teams while their information cannot be processed.</p>
+      </div>
+
+      <h2>2. Indemnity — club/school-organised transport</h2>
+      <p class="draft-note">⚠ Draft wording — this club's version of this section has not yet been confirmed with a lawyer. Treat it as a starting point, not final legal text.</p>
+      <div class="doc-section">
+        <p>From time to time, ${orgName} may arrange transport (such as a bus) for players travelling to away fixtures or events. By agreeing below, you consent to your child travelling using transport arranged by ${orgName} when you have selected this option for a specific fixture.</p>
+        <p>You acknowledge that ${orgName} will take reasonable care for your child's safety during arranged transport, and agree that ${orgName}, its staff, and volunteers will not be held liable for any injury, loss, or damage arising during such transport, except where caused by gross negligence on their part.</p>
+        <p>This indemnity applies only to transport specifically arranged and confirmed by ${orgName} — it does not cover any other travel arrangements.</p>
+      </div>
+
+      <div class="field">
+        <label>Your full name (this is your signature)</label>
+        <input type="text" id="signatureName" placeholder="e.g. Thandiwe Mokoena" value="${escapeHtml(data.signature_name || "")}">
+      </div>
+      <div class="field">
+        <label>Relationship to child</label>
+        <input type="text" id="relationship" placeholder="e.g. Mother, Father, Legal guardian" value="${escapeHtml(data.relationship || "")}">
+      </div>
+
+      <div class="agree-row">
+        <input type="checkbox" id="agreeCheck">
+        <label for="agreeCheck">I confirm I am the parent or legal guardian of ${escapeHtml(data.player_name)}, and I have read and agree to both sections above.</label>
+      </div>
+
+      ${alreadyNote}
+      <button class="btn" id="submitBtn" type="button">Sign & submit</button>
+      <div id="submitStatus"></div>
+    `;
+
+    document.getElementById("submitBtn").addEventListener("click", async () => {
+      const nameInput = document.getElementById("signatureName");
+      const relInput = document.getElementById("relationship");
+      const agreeInput = document.getElementById("agreeCheck");
+      const statusEl = document.getElementById("submitStatus");
+
+      const name = nameInput.value.trim();
+      const relationship = relInput.value.trim();
+
+      if(!name){ statusEl.innerHTML = `<div class="status error">Please enter your full name.</div>`; return; }
+      if(!relationship){ statusEl.innerHTML = `<div class="status error">Please enter your relationship to the child.</div>`; return; }
+      if(!agreeInput.checked){ statusEl.innerHTML = `<div class="status error">Please tick the confirmation box to continue.</div>`; return; }
+
+      document.getElementById("submitBtn").disabled = true;
+      statusEl.innerHTML = `<p class="loading">Saving…</p>`;
+      try{
+        const { data: result, error } = await supabaseClient.functions.invoke("consent-response", {
+          body: { action: "submit", token, signatureName: name, relationship }
+        });
+        if(error || !result || result.error) throw new Error((result && result.error) || "Something went wrong.");
+        statusEl.innerHTML = `<div class="status success">Thank you — this has been recorded and the club's been notified. You can close this page.</div>`;
+        document.getElementById("submitBtn").style.display = "none";
+      }catch(e){
+        document.getElementById("submitBtn").disabled = false;
+        statusEl.innerHTML = `<div class="status error">Couldn't save that — check your connection and try again.</div>`;
+      }
+    });
+  }
+
+  async function init(){
+    if(!token){
+      renderError("This link is missing some information — please use the exact link from your email.");
+      return;
+    }
+    try{
+      const { data, error } = await supabaseClient.functions.invoke("consent-response", {
+        body: { action: "get", token }
+      });
+      if(error || !data || data.error) throw new Error((data && data.error) || "Could not load this request.");
+      renderForm(data.data);
+    }catch(e){
+      renderError("This link isn't valid — check you copied the whole link, or ask your club for a fresh one.");
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

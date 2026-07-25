@@ -355,6 +355,7 @@
     renderConsentStatus();
     renderEmblemPreview();
     renderSubscriptionStatus();
+    renderConsentRegister();
   });
   function renderEmblemPreview(){
     const preview = document.getElementById("emblemPreview");
@@ -413,6 +414,72 @@
     renderEmblemPreview();
     showToast("Club emblem removed.");
   });
+  async function renderConsentRegister(){
+    const listEl = document.getElementById("consentRegisterList");
+    const btn = document.getElementById("btnSendAllConsent");
+    if(!listEl) return;
+
+    if(isDemoMode){
+      listEl.innerHTML = `<div class="dash-empty">Consent register isn't available in demo mode.</div>`;
+      btn.style.display = "none";
+      return;
+    }
+
+    listEl.innerHTML = `<div class="dash-empty">Loading…</div>`;
+
+    const { data, error } = await supabaseClient
+      .from("consent_records")
+      .select("player_id, signed, signed_at")
+      .eq("org_id", currentOrgId);
+
+    if(document.getElementById("consentRegisterList") !== listEl) return; // navigated away mid-load
+
+    if(error){
+      listEl.innerHTML = `<div class="dash-empty">Couldn't load consent status right now.</div>`;
+      return;
+    }
+
+    const recordByPlayer = {};
+    (data || []).forEach(r => { recordByPlayer[r.player_id] = r; });
+
+    if(state.players.length === 0){
+      listEl.innerHTML = `<div class="dash-empty">No players added yet.</div>`;
+      btn.style.display = "none";
+      return;
+    }
+
+    const rows = state.players.slice().sort((a,b) => a.name.localeCompare(b.name)).map(p => {
+      const record = recordByPlayer[p.id];
+      const statusLabel = record && record.signed ? "Signed" : record ? "Sent — awaiting signature" : "Not sent yet";
+      const statusClass = record && record.signed ? "pitch" : record ? "gold" : "slate";
+      return `
+        <div class="staff-row">
+          <span class="staff-email">${escapeHtml(p.name)}</span>
+          <span class="staff-role" style="color:var(--${statusClass});">${statusLabel}</span>
+        </div>
+      `;
+    }).join("");
+
+    listEl.innerHTML = rows;
+
+    const unsignedCount = state.players.filter(p => !(recordByPlayer[p.id] && recordByPlayer[p.id].signed)).length;
+    btn.style.display = unsignedCount > 0 ? "" : "none";
+    btn.textContent = `Send to everyone who hasn't signed (${unsignedCount})`;
+    btn.onclick = async () => {
+      btn.disabled = true;
+      const originalText = btn.textContent;
+      btn.textContent = "Sending…";
+      const toSend = state.players.filter(p => !(recordByPlayer[p.id] && recordByPlayer[p.id].signed) && p.guardianEmail);
+      for(const p of toSend){
+        await sendConsentRequest(p);
+      }
+      showToast(`Sent to ${toSend.length} guardian${toSend.length === 1 ? "" : "s"}.`);
+      btn.disabled = false;
+      btn.textContent = originalText;
+      renderConsentRegister();
+    };
+  }
+
   async function loadStaffList(){
     const listEl = document.getElementById("staffList");
     listEl.innerHTML = `<div style="font-size:12px; color:var(--slate);">Loading…</div>`;
@@ -3924,6 +3991,62 @@
     }
   }
 
+  // Creates a consent/indemnity record for one player and emails their
+  // guardian a link to sign it — used both automatically when a new
+  // player is added, and in bulk from Club Settings for existing players.
+  // If a record already exists for this player (e.g. sent before but not
+  // yet signed), reuses its existing token and just resends the email,
+  // rather than creating a duplicate record.
+  async function sendConsentRequest(player){
+    if(isDemoMode) return; // silently skip in demo — no toast needed here, this fires automatically on every add
+    if(!player.guardianEmail) return; // shouldn't happen now it's required, but stay defensive
+
+    const sport = state.sports.find(s => s.id === player.sportId);
+    const group = ageGroupForPlayer(player);
+    const coach = coachFor(player.sportId, group);
+    const notifyEmail = (coach && coach.email) ? coach.email : (currentUser && currentUser.email) || null;
+
+    try{
+      const { data: existing } = await supabaseClient
+        .from("consent_records")
+        .select("token, signed")
+        .eq("org_id", currentOrgId)
+        .eq("player_id", player.id)
+        .maybeSingle();
+
+      let token;
+      if(existing && !existing.signed){
+        token = existing.token; // reuse — don't create a duplicate for an unsigned pending request
+      } else if(existing && existing.signed){
+        return; // already signed, nothing to send
+      } else {
+        const { data, error } = await supabaseClient.from("consent_records").insert({
+          org_id: currentOrgId,
+          player_id: player.id,
+          player_name: player.name,
+          sport_name: sport ? sport.name : "",
+          org_name: currentOrgName || "",
+          guardian_email: player.guardianEmail,
+          notify_email: notifyEmail
+        }).select("token").single();
+        if(error || !data){
+          console.warn("Totem: could not create consent record for", player.name, "—", error);
+          return;
+        }
+        token = data.token;
+      }
+
+      await supabaseClient.functions.invoke("send-consent-request-email", {
+        body: {
+          recipients: [{ email: player.guardianEmail, token, playerName: player.name }],
+          orgName: currentOrgName
+        }
+      });
+    }catch(e){
+      console.warn("Totem: consent request failed for", player.name, "—", e);
+    }
+  }
+
   async function notifyFixtureCoaches(sport, fixture){
     if(isDemoMode){ showToast("This is a demo — no real email is sent."); return; }
     // Group entries by coach email so a coach covering multiple sides of
@@ -4510,13 +4633,15 @@
     const metrics = {};
     state.metricFields.forEach(f => metrics[f.key] = 5);
 
-    state.players.push({
+    const newPlayer = {
       id: uid(),
       sportId: state.activeSport,
       name, birthDate, positions, vo2max, guardianPhone, guardianEmail,
       dateAdded: isoDate(new Date()),
       metrics
-    });
+    };
+    state.players.push(newPlayer);
+    sendConsentRequest(newPlayer);
     nameInp.value = ""; dobInp.value = ""; vo2Inp.value = ""; guardianPhoneInp.value = ""; guardianEmailInp.value = "";
     document.querySelectorAll("#inPositionsMulti input:checked").forEach(i => i.checked = false);
     document.getElementById("inPositionsMulti").classList.remove("open");
