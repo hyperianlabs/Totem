@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Confirm transport — Totem™</title>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0A1C2C; --pitch:#1F5C43; --pitch-deep:#123527; --mint:#30EFC6;
+    --chalk:#EFF2ED; --ink:#14201A; --slate:#5B6B63; --line:#DBDFD5; --clay:#C1542E;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--chalk); color:var(--ink); font-family:'Inter',sans-serif;
+    min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .card{
+    background:#fff; border-radius:16px; box-shadow:0 20px 50px rgba(20,32,26,0.12);
+    max-width:420px; width:100%; padding:32px 28px; text-align:center;
+  }
+  .wordmark{font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:0.03em; color:var(--navy); margin-bottom:24px;}
+  h1{font-size:20px; margin-bottom:8px;}
+  .context{font-size:14.5px; color:var(--slate); line-height:1.6; margin-bottom:26px;}
+  .context strong{color:var(--ink);}
+  .choices{display:flex; flex-direction:column; gap:12px; margin-bottom:10px;}
+  .choice-btn{
+    border:2px solid var(--line); background:var(--chalk); border-radius:12px; padding:20px 16px;
+    font-size:16px; font-weight:700; cursor:pointer; font-family:'Inter',sans-serif; color:var(--ink);
+    transition:border-color .15s ease, background .15s ease;
+  }
+  .choice-btn:hover{border-color:var(--pitch); background:#fff;}
+  .choice-btn .sub{display:block; font-size:12px; font-weight:500; color:var(--slate); margin-top:4px;}
+  .status{font-size:14px; padding:14px; border-radius:10px; margin-top:16px;}
+  .status.error{background:#FBE9E4; color:var(--clay);}
+  .status.success{background:rgba(48,239,198,0.15); color:var(--pitch-deep);}
+  .loading{color:var(--slate); font-size:14px; padding:20px 0;}
+  .already{font-size:13px; color:var(--slate); margin-top:14px;}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="wordmark">TOTEM<span style="color:var(--mint);">™</span></div>
+  <div id="content">
+    <p class="loading">Loading…</p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+(function(){
+  "use strict";
+  const supabaseClient = window.supabase.createClient(
+    window.TOTEM_CONFIG.SUPABASE_URL,
+    window.TOTEM_CONFIG.SUPABASE_ANON_KEY
+  );
+  const content = document.getElementById("content");
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("token");
+
+  function escapeHtml(str){
+    return String(str).replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+  }
+
+  function renderError(message){
+    content.innerHTML = `<div class="status error">${escapeHtml(message)}</div>`;
+  }
+
+  function renderChoiceScreen(data){
+    const dateLabel = data.fixture_date
+      ? new Date(data.fixture_date + "T00:00:00").toLocaleDateString(undefined, {weekday:"long", day:"numeric", month:"long"})
+      : "";
+    const alreadyNote = data.choice
+      ? `<p class="already">You already confirmed: <strong>${data.choice === "bus" ? "Bus" : "Own transport"}</strong>. You can still change it below.</p>`
+      : "";
+
+    content.innerHTML = `
+      <h1>${escapeHtml(data.player_name)} — away game</h1>
+      <p class="context">
+        <strong>${escapeHtml(data.sport_name)}</strong> vs ${escapeHtml(data.opponent)}${dateLabel ? " · " + escapeHtml(dateLabel) : ""}${data.fixture_time ? " · " + escapeHtml(data.fixture_time) : ""}
+        ${data.venue ? `<br>Away at ${escapeHtml(data.venue)}` : ""}
+      </p>
+      <div class="choices">
+        <button class="choice-btn" data-choice="own">
+          Own transport
+          <span class="sub">We'll get there ourselves</span>
+        </button>
+        <button class="choice-btn" data-choice="bus">
+          Bus
+          <span class="sub">Please book a seat on the school/club bus</span>
+        </button>
+      </div>
+      ${alreadyNote}
+      <div id="submitStatus"></div>
+    `;
+
+    content.querySelectorAll(".choice-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        content.querySelectorAll(".choice-btn").forEach(b => b.disabled = true);
+        const statusEl = document.getElementById("submitStatus");
+        statusEl.innerHTML = `<p class="loading">Saving…</p>`;
+        try{
+          const { data: result, error } = await supabaseClient.functions.invoke("transport-response", {
+            body: { action: "submit", token, choice: btn.dataset.choice }
+          });
+          if(error || !result || result.error) throw new Error((result && result.error) || "Something went wrong.");
+          statusEl.innerHTML = `<div class="status success">Thanks — ${btn.dataset.choice === "bus" ? "we've noted you'll need a bus seat" : "we've noted you'll be using your own transport"}. All done, you can close this page.</div>`;
+        }catch(e){
+          content.querySelectorAll(".choice-btn").forEach(b => b.disabled = false);
+          statusEl.innerHTML = `<div class="status error">Couldn't save that — check your connection and try again.</div>`;
+        }
+      });
+    });
+  }
+
+  async function init(){
+    if(!token){
+      renderError("This link is missing some information — please use the exact link from your email.");
+      return;
+    }
+    try{
+      const { data, error } = await supabaseClient.functions.invoke("transport-response", {
+        body: { action: "get", token }
+      });
+      if(error || !data || data.error) throw new Error((data && data.error) || "Could not load this request.");
+      renderChoiceScreen(data.data);
+    }catch(e){
+      renderError("This link isn't valid — check you copied the whole link, or ask your club for a fresh one.");
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

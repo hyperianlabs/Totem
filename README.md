@@ -282,6 +282,28 @@ No deploy step at all — `demo.html` is a fully static, self-contained page. Vi
 
 **What it actually is:** the real app, with a pre-built Rugby squad ("Riverstone High," 30 players across two sides, two coaches, five fixtures with three real captured results, practice attendance already logged) loaded directly into memory — no login, no Supabase call, ever. Every button works normally (rate a player, add a fixture, browse sides) but nothing persists past a page refresh, and anything that would normally send a real email (result notifications, fixture bookings, season summaries) is caught and replaced with an honest "this is a demo" message instead of actually sending. Safe to link publicly, anywhere.
 
+## Fairer reliability for mid-season additions
+
+No migration needed, pure code. Players now get a join date automatically (invisible, captured when they're added). Reliability is calculated only from practices that happened on or after that date — someone added in week 6 is no longer penalized for "missing" every practice before they even existed on the roster. Existing players are unaffected, since this only applies where a join date exists.
+
+## Rugby scoring breakdown
+
+No migration needed. Capturing a rugby result now shows Tries / Conversions / Penalties / Drop Goals per scorer instead of one generic goals field — the point values (5/2/3/3) compute automatically and get checked against the final score, same "doesn't quite add up" warning pattern as your other sports. "Top scorers" reads "Top points scorers" for rugby specifically, in both the live dashboard and the printed season summary.
+
+## Away-fixture transport requests
+
+**New migration:** `migration-transport-responses.sql` — worth reading the comments in it, since this is a genuinely different kind of table from everything else in this app: guardians never log in, so this is the first place with a real, deliberately-designed anonymous-access system. The table itself has zero direct public access; every guardian interaction goes through a dedicated Edge Function instead, which enforces an exact, unguessable token match server-side.
+
+**Two new functions to deploy:**
+```
+supabase functions deploy transport-response --no-verify-jwt
+supabase functions deploy send-transport-request-email
+```
+
+**How it actually works:** booking a fixture now has a Home/Away toggle. Mark one Away, and the moment you save it, every player's guardian with an email on file gets an automatic email with a one-tap link — no login, just "Own transport" or "Bus." Guardians without an email on file (only a phone number) don't get missed silently — they show up in the fixture's new **Bus register** section with a "Share link" button that opens WhatsApp with their specific link pre-filled, so you can still reach them manually.
+
+The Bus register lives right on the Fixture Detail page for any away fixture — shows a running Bus / Own transport / No response yet count, updates as responses come in. Nobody's forced to answer by a deadline; anyone who doesn't respond just stays visible as "No response yet" so you know who to follow up with directly.
+
 ## Roadmap — not built yet, worth revisiting later
 
 **Offline capture for attendance & results.** Coaches taking attendance or capturing a result on a field with no signal currently just fails — there's no local queue or auto-sync yet. Worth building once there's real evidence it's actually costing someone data (a coach genuinely losing a captured result), rather than pre-emptively — right now, growing the customer base matters more than smoothing this edge case. Scoped narrowly to just attendance + results if/when it's built, not the whole app, since those are the two actions most likely to happen with zero signal and least likely to have two people editing the same thing at once.

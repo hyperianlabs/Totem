@@ -650,6 +650,10 @@
   // Rugby's two lock positions are listed separately (Lock 1 / Lock 2) since
   // Totem slots exactly one player per named position per side — a player
   // who covers either just needs both ticked as playable positions.
+  // Standard rugby union scoring values, used to validate captured scorer
+  // breakdowns against the final score, and to compute each scorer's total
+  // points for the leaderboard.
+  const RUGBY_POINTS = { try:5, conversion:2, penalty:3, dropGoal:3 };
   const RUGBY_TEMPLATE = { id:"rugby", name:"Rugby", iconKey:"rugby", type:"team",
     positions:["Loosehead Prop","Hooker","Tighthead Prop","Lock 1","Lock 2","Blindside Flanker","Openside Flanker","Number 8","Scrum-half","Fly-half","Left Wing","Inside Centre","Outside Centre","Right Wing","Fullback"],
     benchSize:8 };
@@ -2309,14 +2313,16 @@
 
     const uniqueGroups = [...new Set(f.entries.map(en => en.ageGroup))];
     const availabilityHtml = uniqueGroups.map(group => availabilityBlockHtml(f.id, sport.id, group)).join("");
+    const isAway = f.homeAway === "away";
 
     el.innerHTML = `
       <div class="section-title">
-        <h2>vs ${escapeHtml(f.opponent)}</h2>
+        <h2>vs ${escapeHtml(f.opponent)}${isAway ? ` <span class="badge" style="background:var(--clay); color:#fff; font-size:11px; vertical-align:middle;">AWAY</span>` : ""}</h2>
         <span class="sub">${dateLabel}${venueLineHtml(f.venue)}</span>
       </div>
       <div class="sides-board">${groupsHtml}</div>
       ${availabilityHtml}
+      ${isAway ? `<div class="section-title" style="margin-top:24px;"><h2 style="font-size:18px;">🚌 Bus register</h2><span class="sub">who's confirmed transport so far</span></div><div id="busRegisterSection"><div class="dash-empty">Loading…</div></div>` : ""}
     `;
 
     wireSlotSelects(el);
@@ -2345,6 +2351,66 @@
         printFixtureResult(btn.dataset.sport, btn.dataset.group, btn.dataset.side, f);
       });
     });
+    if(isAway) renderBusRegister(f.id);
+  }
+
+  async function renderBusRegister(fixtureId){
+    const section = document.getElementById("busRegisterSection");
+    if(!section) return; // user may have navigated away before this resolved
+
+    if(isDemoMode){
+      section.innerHTML = `<div class="dash-empty">Bus register isn't available in demo mode.</div>`;
+      return;
+    }
+
+    const { data, error } = await supabaseClient
+      .from("transport_responses")
+      .select("player_id, player_name, choice, responded_at, token")
+      .eq("fixture_id", fixtureId)
+      .order("player_name");
+
+    // The user may have navigated to a different fixture while this was
+    // loading — bail out rather than render stale data into the wrong place.
+    if(document.getElementById("busRegisterSection") !== section) return;
+
+    if(error){
+      section.innerHTML = `<div class="dash-empty">Couldn't load the bus register right now.</div>`;
+      return;
+    }
+    if(!data || data.length === 0){
+      section.innerHTML = `<div class="dash-empty">No transport requests sent yet — these go out automatically when guardians have an email on file, or share manually below for anyone who doesn't.</div>`;
+      return;
+    }
+
+    const busCount = data.filter(r => r.choice === "bus").length;
+    const ownCount = data.filter(r => r.choice === "own").length;
+    const pendingCount = data.filter(r => !r.choice).length;
+
+    const rows = data.map(r => {
+      const statusLabel = r.choice === "bus" ? "Bus" : r.choice === "own" ? "Own transport" : "No response yet";
+      const statusClass = r.choice === "bus" ? "clay" : r.choice === "own" ? "pitch" : "slate";
+      const link = `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, "")}transport-response.html?token=${r.token}`;
+      const player = state.players.find(p => p.id === r.player_id);
+      const number = player ? normalizePhoneForWhatsApp(player.guardianPhone) : null;
+      const shareText = `Please confirm transport for ${r.player_name}: ${link}`;
+      const shareUrl = number ? `https://wa.me/${number}?text=${encodeURIComponent(shareText)}` : `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+      return `
+        <div class="staff-row">
+          <span class="staff-email">${escapeHtml(r.player_name)}</span>
+          <span class="staff-role" style="color:var(--${statusClass});">${statusLabel}</span>
+          ${!r.choice ? `<a href="${shareUrl}" target="_blank" rel="noopener" class="btn btn-ghost btn-small">Share link</a>` : ""}
+        </div>
+      `;
+    }).join("");
+
+    section.innerHTML = `
+      <div class="stat-grid" style="margin-bottom:14px;">
+        <div><strong>${busCount}</strong><span>Bus</span></div>
+        <div><strong>${ownCount}</strong><span>Own transport</span></div>
+        <div><strong>${pendingCount}</strong><span>No response yet</span></div>
+      </div>
+      <div class="staff-list">${rows}</div>
+    `;
   }
 
   // ---------- trials (individual sports only) ----------
@@ -2371,7 +2437,13 @@
     );
   }
   function attendancePercentForPlayer(player){
-    const eligible = pastPracticesForPlayerGroup(player.sportId, ageGroupForPlayer(player));
+    let eligible = pastPracticesForPlayerGroup(player.sportId, ageGroupForPlayer(player));
+    // Only count practices from the date this player actually joined —
+    // otherwise someone added mid-season shows as having "missed" every
+    // practice that happened before they even existed on the roster.
+    // Existing players without a dateAdded (added before this fix) are
+    // left unfiltered, so nobody's history changes retroactively.
+    if(player.dateAdded) eligible = eligible.filter(p => p.date >= player.dateAdded);
     if(eligible.length === 0) return null; // not enough data yet
     const attended = eligible.filter(p => (p.attendedPlayerIds || []).includes(player.id)).length;
     return Math.round((attended / eligible.length) * 1000) / 10; // one decimal place
@@ -2606,7 +2678,24 @@
     </div>`;
   }
 
-  function scorerRow(sc, idx, players){
+  function scorerRow(sc, idx, players, sportId){
+    if(sportId === "rugby"){
+      return `
+        <div class="result-row rugby-scorer-row" data-idx="${idx}">
+          <select class="scorer-player">
+            <option value="">Select player…</option>
+            ${players.map(p => `<option value="${p.id}" ${sc.playerId === p.id ? "selected" : ""}>${escapeHtml(p.name)}</option>`).join("")}
+          </select>
+          <div class="rugby-scorer-fields">
+            <label>Tries <input type="number" class="scorer-tries" min="0" value="${sc.tries || 0}" style="width:55px;"></label>
+            <label>Con. <input type="number" class="scorer-conversions" min="0" value="${sc.conversions || 0}" style="width:55px;"></label>
+            <label>Pen. <input type="number" class="scorer-penalties" min="0" value="${sc.penalties || 0}" style="width:55px;"></label>
+            <label>Drop <input type="number" class="scorer-dropgoals" min="0" value="${sc.dropGoals || 0}" style="width:55px;"></label>
+          </div>
+          <button class="btn btn-danger btn-small" data-action="remove-scorer" data-idx="${idx}" type="button">✕</button>
+        </div>
+      `;
+    }
     return `
       <div class="result-row" data-idx="${idx}">
         <select class="scorer-player">
@@ -2647,10 +2736,27 @@
       }));
     } else {
       const rows = document.querySelectorAll("#resultScorers .result-row");
-      resultDraft.scorers = Array.from(rows).map(row => ({
-        playerId: row.querySelector(".scorer-player").value || null,
-        goals: +row.querySelector(".scorer-goals").value || 0
-      }));
+      if(sport.id === "rugby"){
+        resultDraft.scorers = Array.from(rows).map(row => {
+          const tries = +row.querySelector(".scorer-tries").value || 0;
+          const conversions = +row.querySelector(".scorer-conversions").value || 0;
+          const penalties = +row.querySelector(".scorer-penalties").value || 0;
+          const dropGoals = +row.querySelector(".scorer-dropgoals").value || 0;
+          return {
+            playerId: row.querySelector(".scorer-player").value || null,
+            tries, conversions, penalties, dropGoals,
+            // Implied points total — reused as "goals" so the existing
+            // scorer-vs-final-score validation warning and the Top
+            // Scorers leaderboard work without needing separate logic.
+            goals: (tries * RUGBY_POINTS.try) + (conversions * RUGBY_POINTS.conversion) + (penalties * RUGBY_POINTS.penalty) + (dropGoals * RUGBY_POINTS.dropGoal)
+          };
+        });
+      } else {
+        resultDraft.scorers = Array.from(rows).map(row => ({
+          playerId: row.querySelector(".scorer-player").value || null,
+          goals: +row.querySelector(".scorer-goals").value || 0
+        }));
+      }
       resultDraft.ourScore = document.getElementById("resultOurScore").value;
       resultDraft.theirScore = document.getElementById("resultTheirScore").value;
     }
@@ -2665,6 +2771,7 @@
       addBtn.addEventListener("click", () => {
         syncDraftFromDom(sport);
         if(isIndividual) resultDraft.entries.push({ playerId:null, event:positionsForGroup(sport, resultDraft.ageGroup)[0], time:"", place:null });
+        else if(sport.id === "rugby") resultDraft.scorers.push({ playerId:null, tries:0, conversions:0, penalties:0, dropGoals:0 });
         else resultDraft.scorers.push({ playerId:null, goals:1 });
         renderResultModalBody();
       });
@@ -2731,7 +2838,7 @@
           <h2 style="font-size:16px;">Scorers</h2>
         </div>
         <div class="result-entries" id="resultScorers">
-          ${resultDraft.scorers.map((sc, idx) => scorerRow(sc, idx, players)).join("")}
+          ${resultDraft.scorers.map((sc, idx) => scorerRow(sc, idx, players, sport.id)).join("")}
         </div>
         <button class="btn btn-ghost btn-small" id="btnAddScorer" type="button">+ Add scorer</button>
         <div class="field" style="margin-top:14px;">
@@ -2757,6 +2864,7 @@
     // start new captures with one blank row so there's no extra click before typing
     if(!existing){
       if(sportType(sport) === "individual") resultDraft.entries.push({ playerId:null, event:positionsForGroup(sport, group)[0], time:"", place:null });
+      else if(sport.id === "rugby") resultDraft.scorers.push({ playerId:null, tries:0, conversions:0, penalties:0, dropGoals:0 });
       else resultDraft.scorers.push({ playerId:null, goals:1 });
     }
 
@@ -2868,7 +2976,7 @@
       </div>
       <div class="dash-columns">
         <div>
-          <h3 class="dash-subhead">Top scorers</h3>
+          <h3 class="dash-subhead">${currentSport().id === "rugby" ? "Top points scorers" : "Top scorers"}</h3>
           ${scorerRows ? `<div class="leader-list">${scorerRows}</div>` : `<div class="dash-empty">No scorers logged yet.</div>`}
         </div>
         <div>
@@ -3487,8 +3595,8 @@
           <div><strong>${lost}</strong><span>Lost</span></div>
           <div><strong>${gf}–${ga}</strong><span>Goals F–A</span></div>
         </div>
-        <h2>Top scorers</h2>
-        <table><tr><th>Player</th><th>Goals</th></tr>${scorerRows || "<tr><td colspan=2>No scorers logged yet.</td></tr>"}</table>
+        <h2>${sport.id === "rugby" ? "Top points scorers" : "Top scorers"}</h2>
+        <table><tr><th>Player</th><th>${sport.id === "rugby" ? "Points" : "Goals"}</th></tr>${scorerRows || "<tr><td colspan=2>No scorers logged yet.</td></tr>"}</table>
         <h2>Results history</h2>
         <table><tr><th></th><th>Date</th><th>Opponent</th><th>Score</th></tr>${historyRows || "<tr><td colspan=4>No results captured yet.</td></tr>"}</table>
       `;
@@ -3535,6 +3643,90 @@
   // NOTE: this is a UI preview only — sending real email requires a backend
   // (see the chat writeup for how this plugs into Supabase).
   // ---------- result notification email (real send via Edge Function) ----------
+  // All players actually on a side (starting lineup + bench) for an away
+  // fixture, regardless of what contact info they have on file — the
+  // caller decides who gets an automatic email vs. who needs a manual
+  // WhatsApp nudge instead.
+  function collectTravelingPlayers(sportId, group, side, excludeIds){
+    const sport = state.sports.find(s => s.id === sportId);
+    const positions = positionsForGroup(sport, group);
+    const board = computeSides(sportId, group, excludeIds);
+    const boardSide = board[side] || {};
+    const players = [];
+    positions.forEach(pos => {
+      const resolved = resolvedSlot(sportId, group, side, pos, boardSide[pos]);
+      if(resolved && !players.find(p => p.id === resolved.player.id)) players.push(resolved.player);
+    });
+    benchFor(sportId, group, side).filter(Boolean).forEach(id => {
+      const p = state.players.find(pl => pl.id === id);
+      if(p && !players.find(c => c.id === p.id)) players.push(p);
+    });
+    return players;
+  }
+
+  async function sendTransportRequests(sport, fixture){
+    if(isDemoMode){ showToast("This is a demo — no real transport requests are sent."); return; }
+    const excludeIds = unavailableIdsFor(fixture.id);
+
+    const emailRecipients = []; // { email, token, playerName }
+    let noEmailCount = 0;
+
+    for(const en of fixture.entries){
+      const players = collectTravelingPlayers(sport.id, en.ageGroup, en.side, excludeIds);
+      for(const p of players){
+        if(!p.guardianEmail && !p.guardianPhone) continue; // nobody to reach for this player at all
+
+        const { data, error } = await supabaseClient.from("transport_responses").insert({
+          org_id: currentOrgId,
+          fixture_id: fixture.id,
+          player_id: p.id,
+          player_name: p.name,
+          sport_name: sport.name,
+          opponent: fixture.opponent,
+          fixture_date: fixture.date,
+          fixture_time: fixture.time ? formatFixtureTime(fixture.time) : null,
+          venue: fixture.venue || null
+        }).select("token").single();
+
+        if(error || !data){
+          console.warn("Totem: could not create transport response row for", p.name, "—", error);
+          continue;
+        }
+
+        if(p.guardianEmail){
+          emailRecipients.push({ email: p.guardianEmail, token: data.token, playerName: p.name });
+        } else {
+          noEmailCount++;
+        }
+      }
+    }
+
+    if(emailRecipients.length > 0){
+      try{
+        await supabaseClient.functions.invoke("send-transport-request-email", {
+          body: {
+            recipients: emailRecipients,
+            sportName: sport.name,
+            opponent: fixture.opponent,
+            date: fixture.date,
+            time: fixture.time ? formatFixtureTime(fixture.time) : null,
+            venue: fixture.venue || null,
+            orgName: currentOrgName
+          }
+        });
+      }catch(e){
+        console.warn("Totem: transport request emails failed —", e);
+      }
+    }
+
+    if(emailRecipients.length > 0 || noEmailCount > 0){
+      const parts = [];
+      if(emailRecipients.length) parts.push(`${emailRecipients.length} transport request${emailRecipients.length === 1 ? "" : "s"} emailed`);
+      if(noEmailCount) parts.push(`${noEmailCount} guardian${noEmailCount === 1 ? "" : "s"} with only a phone number on file — share their link manually from the fixture's Bus register`);
+      showToast(parts.join(" · ") + ".");
+    }
+  }
+
   async function notifyFixtureCoaches(sport, fixture){
     if(isDemoMode){ showToast("This is a demo — no real email is sent."); return; }
     // Group entries by coach email so a coach covering multiple sides of
@@ -3662,8 +3854,18 @@
     document.getElementById("fxOpponent").placeholder = type === "trial" ? "e.g. Term 1 Time Trials" : "e.g. St Mary's";
     document.getElementById("fxAgeGroupsLabel").textContent = type === "trial" ? "Age groups trialling" : "Age groups & sides playing";
     document.getElementById("confirmFixture").textContent = type === "trial" ? "Save trial" : "Save fixture";
+    document.getElementById("fxHomeAwayField").style.display = type === "trial" ? "none" : "";
     renderFxAgeGroupsGrid(sport, type);
   }
+
+  let fxHomeAway = "home";
+  function setFxHomeAway(value){
+    fxHomeAway = value;
+    document.getElementById("fxHomeBtn").classList.toggle("active", value === "home");
+    document.getElementById("fxAwayBtn").classList.toggle("active", value === "away");
+  }
+  document.getElementById("fxHomeBtn").addEventListener("click", () => setFxHomeAway("home"));
+  document.getElementById("fxAwayBtn").addEventListener("click", () => setFxHomeAway("away"));
 
   function openAddFixtureModal(prefillDateOrItem, editType){
     const sport = currentSport();
@@ -3678,6 +3880,7 @@
     document.getElementById("fxOpponent").value = item ? (editType === "trial" ? item.name : item.opponent) : "";
     document.getElementById("fxVenue").value = item ? (item.venue || "") : "";
     document.getElementById("fxVenueAddress").value = item ? (venueAddressFor(item.venue) || "") : "";
+    setFxHomeAway(item && item.homeAway ? item.homeAway : "home");
     populateVenueDatalist();
 
     document.getElementById("fxTypeField").style.display = isIndividual ? "" : "none";
@@ -3964,10 +4167,10 @@
             state.results = state.results.filter(r => !(r.fixtureId === editingFixtureId && groupsMatch(r.ageGroup, en.ageGroup) && r.side === en.side));
           });
         }
-        fixture.date = date; fixture.time = time; fixture.opponent = label; fixture.venue = venue; fixture.entries = entries;
+        fixture.date = date; fixture.time = time; fixture.opponent = label; fixture.venue = venue; fixture.entries = entries; fixture.homeAway = fxHomeAway;
         savedFixture = fixture;
       } else {
-        savedFixture = { id: uid(), sportId: sport.id, date, time, opponent: label, venue, entries };
+        savedFixture = { id: uid(), sportId: sport.id, date, time, opponent: label, venue, entries, homeAway: fxHomeAway };
         state.fixtures.push(savedFixture);
       }
     }
@@ -3976,7 +4179,10 @@
     document.getElementById("fixtureModal").classList.remove("open");
     saveState();
     renderCalendar(); renderFixtureList(); renderFixtureDetail(); renderSides(); renderDashboard();
-    if(savedFixture) notifyFixtureCoaches(sport, savedFixture);
+    if(savedFixture){
+      notifyFixtureCoaches(sport, savedFixture);
+      if(savedFixture.homeAway === "away") sendTransportRequests(sport, savedFixture);
+    }
   });
 
   // ---------- sport icons ----------
@@ -4108,6 +4314,7 @@
       id: uid(),
       sportId: state.activeSport,
       name, birthDate, positions, vo2max, guardianPhone, guardianEmail,
+      dateAdded: isoDate(new Date()),
       metrics
     });
     nameInp.value = ""; dobInp.value = ""; vo2Inp.value = ""; guardianPhoneInp.value = ""; guardianEmailInp.value = "";

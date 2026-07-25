@@ -489,6 +489,11 @@
   .modal.modal-wide{max-width:520px;}
   .result-entries{display:flex; flex-direction:column; gap:8px; margin-bottom:8px;}
   .result-row{display:flex; gap:6px; align-items:center; flex-wrap:wrap;}
+  .rugby-scorer-row{padding:8px 0; border-bottom:1px dashed var(--line);}
+  .rugby-scorer-row:last-child{border-bottom:none;}
+  .rugby-scorer-fields{display:flex; gap:10px; flex-wrap:wrap; align-items:center;}
+  .rugby-scorer-fields label{display:flex; flex-direction:column; gap:2px; font-size:10px; color:var(--slate); text-transform:uppercase; letter-spacing:0.03em; font-weight:600;}
+  .rugby-scorer-fields input{margin-top:2px;}
   .result-row select{
     border:1px solid var(--line-strong); border-radius:7px; padding:8px 9px; font-size:13px;
     font-family:'Inter',sans-serif; background:var(--chalk); flex:1; min-width:120px;
