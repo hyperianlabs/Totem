@@ -32,6 +32,7 @@
     transition:border-color .15s ease, background .15s ease;
   }
   .choice-btn:hover{border-color:var(--pitch); background:#fff;}
+  .choice-btn-unavailable:hover{border-color:var(--clay);}
   .choice-btn .sub{display:block; font-size:12px; font-weight:500; color:var(--slate); margin-top:4px;}
   .status{font-size:14px; padding:14px; border-radius:10px; margin-top:16px;}
   .status.error{background:#FBE9E4; color:var(--clay);}
@@ -75,7 +76,7 @@
       ? new Date(data.fixture_date + "T00:00:00").toLocaleDateString(undefined, {weekday:"long", day:"numeric", month:"long"})
       : "";
     const alreadyNote = data.choice
-      ? `<p class="already">You already confirmed: <strong>${data.choice === "bus" ? "Bus" : "Own transport"}</strong>. You can still change it below.</p>`
+      ? `<p class="already">You already confirmed: <strong>${data.choice === "bus" ? "Bus" : data.choice === "unavailable" ? "Not available" : "Own transport"}</strong>. You can still change it below.</p>`
       : "";
 
     content.innerHTML = `
@@ -93,6 +94,10 @@
           Bus
           <span class="sub">Please book a seat on the school/club bus</span>
         </button>
+        <button class="choice-btn choice-btn-unavailable" data-choice="unavailable">
+          Not available
+          <span class="sub">Won't be able to play this match</span>
+        </button>
       </div>
       ${alreadyNote}
       <div id="submitStatus"></div>
@@ -108,7 +113,10 @@
             body: { action: "submit", token, choice: btn.dataset.choice }
           });
           if(error || !result || result.error) throw new Error((result && result.error) || "Something went wrong.");
-          statusEl.innerHTML = `<div class="status success">Thanks — ${btn.dataset.choice === "bus" ? "we've noted you'll need a bus seat" : "we've noted you'll be using your own transport"}. All done, you can close this page.</div>`;
+          const confirmMsg = btn.dataset.choice === "bus" ? "we've noted you'll need a bus seat"
+            : btn.dataset.choice === "unavailable" ? "we've let the club know they won't be available for this match"
+            : "we've noted you'll be using your own transport";
+          statusEl.innerHTML = `<div class="status success">Thanks — ${confirmMsg}. All done, you can close this page.</div>`;
         }catch(e){
           content.querySelectorAll(".choice-btn").forEach(b => b.disabled = false);
           statusEl.innerHTML = `<div class="status error">Couldn't save that — check your connection and try again.</div>`;

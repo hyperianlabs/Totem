@@ -26,7 +26,7 @@ create table if not exists public.transport_responses (
   fixture_time text,
   venue text,
   token uuid not null default gen_random_uuid() unique,
-  choice text check (choice in ('own','bus')),
+  choice text check (choice in ('own','bus','unavailable')),
   responded_at timestamptz,
   created_at timestamptz not null default now()
 );

@@ -304,6 +304,26 @@ supabase functions deploy send-transport-request-email
 
 The Bus register lives right on the Fixture Detail page for any away fixture — shows a running Bus / Own transport / No response yet count, updates as responses come in. Nobody's forced to answer by a deadline; anyone who doesn't respond just stays visible as "No response yet" so you know who to follow up with directly.
 
+## Team captain & vice-captain
+
+No migration needed, pure code. Set from the **Team Sides** board — each side card now has a Captain and Vice-captain picker, populated from whoever's actually in that side's current lineup. This is season-long, like coaches: set once, stays until you change it, rather than needing to be re-picked for every fixture. Shows up everywhere that side's lineup is displayed — the roster dropdown itself (as "(C)"/"(VC)" next to their name), the Fixture Detail team view, printed team sheets, and WhatsApp shares — all from one place, no need to set it multiple times. If a captain ever rotates out of the side entirely, they still show as a flagged option ("no longer in this side") rather than silently vanishing, so the assignment isn't lost without you noticing.
+
+## Guardian contact & email now required
+
+Both fields on the Add Player form are no longer optional — matches player name and date of birth in being required to actually add someone. Existing players who already have gaps in this data aren't affected retroactively (nothing breaks for them), but editing an existing player's guardian fields now blocks clearing them to blank, and email addresses are checked for valid formatting.
+
+## Fixed: age-group tabs defaulting to an empty group
+
+Small but real fix — the Sides and Results tabs were defaulting to whichever age group happened to sort first (previously "U9," now "U6" after this session's earlier change), regardless of whether anyone was actually in it. Now defaults to the first group that actually has players, falling back to the plain first option only if literally no one's been added anywhere yet.
+
+## Transport response — third option: "Not available"
+
+**New migration:** `migration-transport-unavailable-option.sql` — run this even if you already ran the original transport migration; it extends the existing table rather than replacing it.
+
+Guardians can now respond "Not available" alongside Own transport / Bus. Worth understanding the design decision here: this deliberately does **not** silently auto-flag a player as unavailable in the background. Your club's roster and fixtures are saved as one combined blob, and a background write happening at the same moment you're actively editing something in the app could silently overwrite one or the other — a real risk, not a hypothetical one.
+
+Instead, a "Not available" response shows up clearly in the fixture's **Bus register**, with a one-click **"Mark unavailable"** button right there — it applies through the exact same safe path as everything else you do in the app, and immediately shows up in the existing Availability checklist too (they share the same underlying data, so there's nothing to keep in sync manually).
+
 ## Roadmap — not built yet, worth revisiting later
 
 **Offline capture for attendance & results.** Coaches taking attendance or capturing a result on a field with no signal currently just fails — there's no local queue or auto-sync yet. Worth building once there's real evidence it's actually costing someone data (a coach genuinely losing a captured result), rather than pre-emptively — right now, growing the customer base matters more than smoothing this edge case. Scoped narrowly to just attendance + results if/when it's built, not the whole app, since those are the two actions most likely to happen with zero signal and least likely to have two people editing the same thing at once.

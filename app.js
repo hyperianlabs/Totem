@@ -681,6 +681,7 @@
         { name: "Marlow Grammar", address: "21 Marlow Street, Randburg" },
         { name: "Fernwood Academy", address: "5 Fernwood Close, Midrand" }
       ],
+      captains: {},
       activeSport: "rugby"
     };
   }
@@ -827,6 +828,7 @@
     bench: {},
     unavailable: {},
     venues: [],
+    captains: {},
     activeSport: "netball"
   };
 
@@ -1122,11 +1124,13 @@
     const resolved = resolvedSlot(sportId, group, side, position, autoEntry);
     const players = eligiblePlayersForSwap(sportId, group);
     const isDuplicate = resolved && duplicatePlayerIds && duplicatePlayerIds.has(resolved.player.id);
+    const captains = captainsFor(sportId, group, side);
+    const captainTag = (playerId) => playerId === captains.captainId ? " (C)" : playerId === captains.viceCaptainId ? " (VC)" : "";
 
     const options = [
-      `<option value="__auto__" ${!hasOverride ? "selected" : ""}>Auto: ${autoEntry ? escapeHtml(autoEntry.player.name) : "Unfilled"}</option>`,
+      `<option value="__auto__" ${!hasOverride ? "selected" : ""}>Auto: ${autoEntry ? escapeHtml(autoEntry.player.name) + captainTag(autoEntry.player.id) : "Unfilled"}</option>`,
       `<option value="__empty__" ${hasOverride && overridePlayerId === null ? "selected" : ""}>— Leave empty —</option>`,
-      ...players.map(p => `<option value="${p.id}" ${hasOverride && overridePlayerId === p.id ? "selected" : ""}>${escapeHtml(p.name)} (${escapeHtml(playerPositions(p).join(", "))})</option>`)
+      ...players.map(p => `<option value="${p.id}" ${hasOverride && overridePlayerId === p.id ? "selected" : ""}>${escapeHtml(p.name)}${captainTag(p.id)} (${escapeHtml(playerPositions(p).join(", "))})</option>`)
     ].join("");
 
     const scoreDisplay = resolved ? (resolved.trialTime ? "⏱ " + escapeHtml(resolved.trialTime) : resolved.score.toFixed(1)) : "";
@@ -1209,6 +1213,14 @@
 
   function ageGroupsForSport(sportId){
     return CANONICAL_AGE_GROUPS.slice();
+  }
+  // Prefers whichever canonical age group actually has players in it, so
+  // tabs don't default to an empty group just because it happens to sort
+  // first (e.g. "U6" before any U6 players exist) — falls back to the
+  // plain first group only if literally nobody's been added yet anywhere.
+  function firstGroupWithPlayers(sportId, groups){
+    const withPlayers = groups.find(g => state.players.some(p => p.sportId === sportId && groupsMatch(ageGroupForPlayer(p), g)));
+    return withPlayers || groups[0] || null;
   }
 
   // Normalized comparison for age-group labels — coaches/fixtures store free-typed
@@ -1750,7 +1762,13 @@
         const id = e.target.dataset.id;
         const p = state.players.find(pl => pl.id === id);
         if(!p) return;
-        p.guardianPhone = e.target.value.trim() || null;
+        const value = e.target.value.trim();
+        if(!value){
+          alert("Guardian contact is required — this can't be left blank.");
+          e.target.value = p.guardianPhone || "";
+          return;
+        }
+        p.guardianPhone = value;
         saveState(); render();
       });
     });
@@ -1759,7 +1777,18 @@
         const id = e.target.dataset.id;
         const p = state.players.find(pl => pl.id === id);
         if(!p) return;
-        p.guardianEmail = e.target.value.trim() || null;
+        const value = e.target.value.trim();
+        if(!value){
+          alert("Guardian email is required — this can't be left blank.");
+          e.target.value = p.guardianEmail || "";
+          return;
+        }
+        if(!isValidEmail(value)){
+          alert("Enter a valid guardian email address.");
+          e.target.value = p.guardianEmail || "";
+          return;
+        }
+        p.guardianEmail = value;
         saveState(); render();
       });
     });
@@ -1859,6 +1888,68 @@
     });
   }
 
+  // ---------- captain / vice-captain (season-long, per side) ----------
+  function captainKey(sportId, group, side){
+    return sportId + "|" + normalizeGroupLabelKey(group) + "|" + side;
+  }
+  function captainsFor(sportId, group, side){
+    return state.captains[captainKey(sportId, group, side)] || { captainId: null, viceCaptainId: null };
+  }
+  // Unique players currently resolved into a side's lineup, used to
+  // populate the captain/vice-captain pickers — only ever offers players
+  // actually in that side right now, though a previously-set captain who's
+  // since rotated out is still shown as a distinct extra option so the
+  // assignment isn't silently lost, just flagged.
+  function playersInSide(sportId, group, side, positions){
+    const sport = state.sports.find(s => s.id === sportId);
+    const groupPositions = positionsForGroup(sport, group);
+    const players = [];
+    groupPositions.forEach(pos => {
+      const resolved = resolvedSlot(sportId, group, side, pos, positions[pos]);
+      if(resolved && !players.find(p => p.id === resolved.player.id)) players.push(resolved.player);
+    });
+    return players;
+  }
+  function captainPickerHtml(sportId, group, side, positions){
+    const current = captainsFor(sportId, group, side);
+    const lineup = playersInSide(sportId, group, side, positions);
+    const optionsFor = (selectedId) => {
+      let opts = `<option value="">— none —</option>`;
+      opts += lineup.map(p => `<option value="${p.id}" ${selectedId === p.id ? "selected" : ""}>${escapeHtml(p.name)}</option>`).join("");
+      if(selectedId && !lineup.find(p => p.id === selectedId)){
+        const p = state.players.find(pl => pl.id === selectedId);
+        if(p) opts += `<option value="${p.id}" selected>${escapeHtml(p.name)} (no longer in this side)</option>`;
+      }
+      return opts;
+    };
+    return `
+      <div class="captain-picker">
+        <label>Captain <select class="captain-select" data-sport="${sportId}" data-group="${escapeHtml(group)}" data-side="${side}">${optionsFor(current.captainId)}</select></label>
+        <label>Vice-captain <select class="vice-captain-select" data-sport="${sportId}" data-group="${escapeHtml(group)}" data-side="${side}">${optionsFor(current.viceCaptainId)}</select></label>
+      </div>
+    `;
+  }
+  function wireCaptainPickers(container){
+    container.querySelectorAll(".captain-select").forEach(sel => {
+      sel.addEventListener("change", (e) => {
+        const key = captainKey(e.target.dataset.sport, e.target.dataset.group, e.target.dataset.side);
+        const entry = state.captains[key] || { captainId: null, viceCaptainId: null };
+        entry.captainId = e.target.value || null;
+        state.captains[key] = entry;
+        saveState(); render();
+      });
+    });
+    container.querySelectorAll(".vice-captain-select").forEach(sel => {
+      sel.addEventListener("change", (e) => {
+        const key = captainKey(e.target.dataset.sport, e.target.dataset.group, e.target.dataset.side);
+        const entry = state.captains[key] || { captainId: null, viceCaptainId: null };
+        entry.viceCaptainId = e.target.value || null;
+        state.captains[key] = entry;
+        saveState(); render();
+      });
+    });
+  }
+
   function renderSides(){
     const sport = currentSport();
     const noun = sportType(sport) === "individual" ? "event" : "position";
@@ -1869,7 +1960,7 @@
     const boardEl = document.getElementById("sidesBoard");
 
     if(!groups.includes(sidesActiveAgeGroup)){
-      sidesActiveAgeGroup = groups[0] || null;
+      sidesActiveAgeGroup = firstGroupWithPlayers(sport.id, groups);
     }
 
     if(groups.length === 0){
@@ -1937,6 +2028,7 @@
           <button class="print-btn" data-action="print-team" data-sport="${sport.id}" data-group="${escapeHtml(sidesActiveAgeGroup)}" data-side="${letter}" title="Print team sheet" type="button">${uiIcon("printer", 13)}</button>
           <button class="print-btn" data-action="whatsapp-team" data-sport="${sport.id}" data-group="${escapeHtml(sidesActiveAgeGroup)}" data-side="${letter}" title="Share via WhatsApp" type="button">${uiIcon("chat", 13)}</button>
         </div>
+        ${captainPickerHtml(sport.id, sidesActiveAgeGroup, letter, positions)}
         <div class="side-body">${slots}</div>
         ${benchEditableHtml(sport.id, sidesActiveAgeGroup, letter)}
       `;
@@ -1945,6 +2037,7 @@
 
     wireSlotSelects(boardEl);
     wireBenchSelects(boardEl);
+    wireCaptainPickers(boardEl);
     boardEl.querySelectorAll('[data-action="print-team"]').forEach(btn => {
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -2384,21 +2477,29 @@
 
     const busCount = data.filter(r => r.choice === "bus").length;
     const ownCount = data.filter(r => r.choice === "own").length;
+    const unavailableCount = data.filter(r => r.choice === "unavailable").length;
     const pendingCount = data.filter(r => !r.choice).length;
 
     const rows = data.map(r => {
-      const statusLabel = r.choice === "bus" ? "Bus" : r.choice === "own" ? "Own transport" : "No response yet";
-      const statusClass = r.choice === "bus" ? "clay" : r.choice === "own" ? "pitch" : "slate";
+      const statusLabel = r.choice === "bus" ? "Bus" : r.choice === "own" ? "Own transport" : r.choice === "unavailable" ? "Not available" : "No response yet";
+      const statusClass = r.choice === "bus" ? "clay" : r.choice === "own" ? "pitch" : r.choice === "unavailable" ? "clay" : "slate";
       const link = `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, "")}transport-response.html?token=${r.token}`;
       const player = state.players.find(p => p.id === r.player_id);
       const number = player ? normalizePhoneForWhatsApp(player.guardianPhone) : null;
       const shareText = `Please confirm transport for ${r.player_name}: ${link}`;
       const shareUrl = number ? `https://wa.me/${number}?text=${encodeURIComponent(shareText)}` : `https://wa.me/?text=${encodeURIComponent(shareText)}`;
+      const alreadyMarkedUnavailable = unavailableIdsFor(fixtureId).includes(r.player_id);
+      const markUnavailableBtn = (r.choice === "unavailable" && r.player_id && !alreadyMarkedUnavailable)
+        ? `<button class="btn btn-danger btn-small" data-action="apply-unavailable" data-player="${r.player_id}" type="button">Mark unavailable</button>`
+        : (r.choice === "unavailable" && alreadyMarkedUnavailable)
+        ? `<span style="font-size:11px; color:var(--slate);">✓ Applied</span>`
+        : "";
       return `
         <div class="staff-row">
           <span class="staff-email">${escapeHtml(r.player_name)}</span>
           <span class="staff-role" style="color:var(--${statusClass});">${statusLabel}</span>
           ${!r.choice ? `<a href="${shareUrl}" target="_blank" rel="noopener" class="btn btn-ghost btn-small">Share link</a>` : ""}
+          ${markUnavailableBtn}
         </div>
       `;
     }).join("");
@@ -2407,10 +2508,22 @@
       <div class="stat-grid" style="margin-bottom:14px;">
         <div><strong>${busCount}</strong><span>Bus</span></div>
         <div><strong>${ownCount}</strong><span>Own transport</span></div>
+        <div><strong>${unavailableCount}</strong><span>Not available</span></div>
         <div><strong>${pendingCount}</strong><span>No response yet</span></div>
       </div>
       <div class="staff-list">${rows}</div>
     `;
+
+    section.querySelectorAll('[data-action="apply-unavailable"]').forEach(btn => {
+      btn.addEventListener("click", () => {
+        const playerId = btn.dataset.player;
+        const list = new Set(state.unavailable[fixtureId] || []);
+        list.add(playerId);
+        state.unavailable[fixtureId] = [...list];
+        saveState();
+        renderFixtureDetail(); // re-renders the whole fixture, including this register
+      });
+    });
   }
 
   // ---------- trials (individual sports only) ----------
@@ -3050,7 +3163,7 @@
     const bodyEl = document.getElementById("dashBody");
 
     if(!groups.includes(dashboardAgeGroup)){
-      dashboardAgeGroup = groups[0] || null;
+      dashboardAgeGroup = firstGroupWithPlayers(sport.id, groups);
     }
 
     if(groups.length === 0){
@@ -3354,13 +3467,15 @@
     const positions = positionsForGroup(sport, group);
     const board = computeSides(sportId, group, excludeIds);
     const boardSide = board[side] || {};
+    const captains = captainsFor(sportId, group, side);
+    const captainTag = (playerId) => playerId === captains.captainId ? " (C)" : playerId === captains.viceCaptainId ? " (VC)" : "";
     const rows = positions.map(pos => {
       const resolved = resolvedSlot(sportId, group, side, pos, boardSide[pos]);
-      return { position: pos, name: resolved ? resolved.player.name : "—" };
+      return { position: pos, name: resolved ? resolved.player.name + captainTag(resolved.player.id) : "—" };
     });
     const benchIds = benchFor(sportId, group, side).filter(Boolean);
     const bench = benchIds
-      .map(id => { const p = state.players.find(pl => pl.id === id); return p ? p.name : null; })
+      .map(id => { const p = state.players.find(pl => pl.id === id); return p ? p.name + captainTag(p.id) : null; })
       .filter(Boolean);
     return { rows, bench };
   }
@@ -4306,6 +4421,9 @@
     if(!birthDate || turning === null){ alert("Enter a date of birth."); dobInp.focus(); return; }
     if(turning < 4 || turning > 90){ alert("That date of birth gives an age outside the expected range — double check it."); dobInp.focus(); return; }
     if(positions.length === 0){ alert(isIndividual ? "Select at least one event." : "Select a position."); return; }
+    if(!guardianPhone){ alert("Enter a guardian contact number — this is required so team sheets and updates can actually reach them."); guardianPhoneInp.focus(); return; }
+    if(!guardianEmail){ alert("Enter a guardian email address — this is required so results and season summaries can actually reach them."); guardianEmailInp.focus(); return; }
+    if(!isValidEmail(guardianEmail)){ alert("Enter a valid guardian email address."); guardianEmailInp.focus(); return; }
 
     const metrics = {};
     state.metricFields.forEach(f => metrics[f.key] = 5);
