@@ -2251,17 +2251,21 @@
   function renderFixtureList(){
     const sport = currentSport();
     const isIndividual = sportType(sport) === "individual";
+    const todayIso = isoDate(new Date());
+    // The list below the calendar only shows what's still ahead — past
+    // fixtures/trials aren't gone, they're just not cluttering this view;
+    // navigate back a month on the calendar itself to see them.
     const entries = [
-      ...fixturesForSport(sport.id).map(f => ({ kind:"fixture", date:f.date, item:f })),
-      ...(isIndividual ? trialsForSport(sport.id).map(t => ({ kind:"trial", date:t.date, item:t })) : [])
+      ...fixturesForSport(sport.id).filter(f => f.date >= todayIso).map(f => ({ kind:"fixture", date:f.date, item:f })),
+      ...(isIndividual ? trialsForSport(sport.id).filter(t => t.date >= todayIso).map(t => ({ kind:"trial", date:t.date, item:t })) : [])
     ].sort((a,b) => a.date.localeCompare(b.date));
     const el = document.getElementById("fixtureList");
 
     if(entries.length === 0){
       el.innerHTML = `<div class="roster-empty">
         <span class="glyph">${uiIcon("calendar", 34)}</span>
-        <h3>No fixtures yet</h3>
-        <div>Add a fixture on the calendar above and Totem will build the best team per age group.${isIndividual ? " Booking a time trial uses the same button." : ""}</div>
+        <h3>No upcoming fixtures</h3>
+        <div>Add a fixture on the calendar above and Totem will build the best team per age group.${isIndividual ? " Booking a time trial uses the same button." : ""} Past fixtures are still there — check the calendar.</div>
       </div>`;
       return;
     }

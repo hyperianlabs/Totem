@@ -346,6 +346,10 @@ supabase functions deploy send-consent-request-email
 
 This replaces the old Word-doc process, as agreed — **Club Settings → Consent & indemnity** now shows every player's status (Signed / Sent, awaiting signature / Not sent yet), with a **"Send to everyone who hasn't signed"** button that covers your whole existing roster in one click, not just new players going forward. Re-sending to someone who already has a pending, unsigned request reuses their same link rather than creating a duplicate.
 
+## Past fixtures no longer clutter the dashboard
+
+No migration needed, pure code. The fixture list below the calendar now only shows what's still ahead — nothing's deleted, past fixtures and their results are exactly where they always were, just navigate the calendar back a month to browse them directly.
+
 ## Roadmap — not built yet, worth revisiting later
 
 **Offline capture for attendance & results.** Coaches taking attendance or capturing a result on a field with no signal currently just fails — there's no local queue or auto-sync yet. Worth building once there's real evidence it's actually costing someone data (a coach genuinely losing a captured result), rather than pre-emptively — right now, growing the customer base matters more than smoothing this edge case. Scoped narrowly to just attendance + results if/when it's built, not the whole app, since those are the two actions most likely to happen with zero signal and least likely to have two people editing the same thing at once.
