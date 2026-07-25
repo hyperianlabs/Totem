@@ -324,6 +324,12 @@ Guardians can now respond "Not available" alongside Own transport / Bus. Worth u
 
 Instead, a "Not available" response shows up clearly in the fixture's **Bus register**, with a one-click **"Mark unavailable"** button right there — it applies through the exact same safe path as everything else you do in the app, and immediately shows up in the existing Availability checklist too (they share the same underlying data, so there's nothing to keep in sync manually).
 
+## Bus boarding register
+
+**New migration:** `migration-bus-boarding-register.sql` — run this after the other transport migrations.
+
+The Bus Register (on any away fixture) now has a live "On the bus" checkbox next to everyone who confirmed Bus transport — tick it as each player actually boards, and the "X / Y on the bus" count updates immediately, right there on your phone or laptop at the bus. There's also a **Print bus register** button for a physical, paper checklist covering just the bus riders, same style as your existing practice attendance sheets, useful as a backup or for whoever's actually standing at the door.
+
 ## Roadmap — not built yet, worth revisiting later
 
 **Offline capture for attendance & results.** Coaches taking attendance or capturing a result on a field with no signal currently just fails — there's no local queue or auto-sync yet. Worth building once there's real evidence it's actually costing someone data (a coach genuinely losing a captured result), rather than pre-emptively — right now, growing the customer base matters more than smoothing this edge case. Scoped narrowly to just attendance + results if/when it's built, not the whole app, since those are the two actions most likely to happen with zero signal and least likely to have two people editing the same thing at once.

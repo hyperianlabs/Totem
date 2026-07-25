@@ -2458,7 +2458,7 @@
 
     const { data, error } = await supabaseClient
       .from("transport_responses")
-      .select("player_id, player_name, choice, responded_at, token")
+      .select("id, player_id, player_name, choice, responded_at, token, boarded")
       .eq("fixture_id", fixtureId)
       .order("player_name");
 
@@ -2479,6 +2479,7 @@
     const ownCount = data.filter(r => r.choice === "own").length;
     const unavailableCount = data.filter(r => r.choice === "unavailable").length;
     const pendingCount = data.filter(r => !r.choice).length;
+    const boardedCount = data.filter(r => r.choice === "bus" && r.boarded).length;
 
     const rows = data.map(r => {
       const statusLabel = r.choice === "bus" ? "Bus" : r.choice === "own" ? "Own transport" : r.choice === "unavailable" ? "Not available" : "No response yet";
@@ -2494,10 +2495,16 @@
         : (r.choice === "unavailable" && alreadyMarkedUnavailable)
         ? `<span style="font-size:11px; color:var(--slate);">✓ Applied</span>`
         : "";
+      const boardedCheckbox = r.choice === "bus"
+        ? `<label style="display:flex; align-items:center; gap:5px; font-size:12px; font-weight:600; cursor:pointer;">
+             <input type="checkbox" class="boarded-toggle" data-id="${r.id}" ${r.boarded ? "checked" : ""}> On the bus
+           </label>`
+        : "";
       return `
         <div class="staff-row">
           <span class="staff-email">${escapeHtml(r.player_name)}</span>
           <span class="staff-role" style="color:var(--${statusClass});">${statusLabel}</span>
+          ${boardedCheckbox}
           ${!r.choice ? `<a href="${shareUrl}" target="_blank" rel="noopener" class="btn btn-ghost btn-small">Share link</a>` : ""}
           ${markUnavailableBtn}
         </div>
@@ -2511,8 +2518,38 @@
         <div><strong>${unavailableCount}</strong><span>Not available</span></div>
         <div><strong>${pendingCount}</strong><span>No response yet</span></div>
       </div>
+      ${busCount > 0 ? `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+          <strong style="font-size:13px;">${boardedCount} / ${busCount} on the bus</strong>
+          <button class="btn btn-ghost btn-small" id="btnPrintBusRegister" type="button">${uiIcon("printer", 13)} Print bus register</button>
+        </div>
+      ` : ""}
       <div class="staff-list">${rows}</div>
     `;
+
+    const printBtn = document.getElementById("btnPrintBusRegister");
+    if(printBtn) printBtn.addEventListener("click", () => printBusRegister(fixtureId, data));
+
+    section.querySelectorAll(".boarded-toggle").forEach(cb => {
+      cb.addEventListener("change", async (e) => {
+        const rowId = e.target.dataset.id;
+        const boarded = e.target.checked;
+        e.target.disabled = true;
+        try{
+          const { error: updateError } = await supabaseClient
+            .from("transport_responses")
+            .update({ boarded, boarded_at: boarded ? new Date().toISOString() : null })
+            .eq("id", rowId);
+          if(updateError) throw updateError;
+          renderBusRegister(fixtureId); // refreshes the live count, not just this checkbox
+        }catch(err){
+          console.warn("Totem: could not update boarded status —", err);
+          e.target.checked = !boarded; // revert on failure
+          alert("Couldn't save that — check your connection and try again.");
+          e.target.disabled = false;
+        }
+      });
+    });
 
     section.querySelectorAll('[data-action="apply-unavailable"]').forEach(btn => {
       btn.addEventListener("click", () => {
@@ -2524,6 +2561,51 @@
         renderFixtureDetail(); // re-renders the whole fixture, including this register
       });
     });
+  }
+
+  function printBusRegister(fixtureId, transportData){
+    const f = state.fixtures.find(x => x.id === fixtureId);
+    if(!f) return;
+    const sport = state.sports.find(s => s.id === f.sportId);
+    const busRiders = transportData.filter(r => r.choice === "bus").sort((a,b) => a.player_name.localeCompare(b.player_name));
+
+    const win = window.open("", "_blank", "width=700,height=900");
+    if(!win){ alert("Please allow pop-ups to print the bus register."); return; }
+
+    const dateLabel = new Date(f.date + "T00:00:00").toLocaleDateString(undefined,{weekday:"long", day:"numeric", month:"long", year:"numeric"}) + (f.time ? ` · ${formatFixtureTime(f.time)}` : "");
+    const rowsHtml = busRiders.map(r => `<tr><td class="mark-col">${r.boarded ? "✓" : ""}</td><td>${escapeHtml(r.player_name)}</td></tr>`).join("");
+
+    win.document.write(`<!DOCTYPE html><html><head><title>Bus register — vs ${escapeHtml(f.opponent)}</title>
+      <style>
+        body{font-family:Arial,Helvetica,sans-serif; padding:32px; color:#14201A;}
+        .print-header{display:flex; align-items:center; gap:18px; margin-bottom:22px; padding-bottom:16px; border-bottom:2px solid #14201A;}
+        .print-header img{height:80px; width:auto; display:block;}
+        h1{font-size:22px; margin:0 0 2px;}
+        .sub{color:#5B6B63; font-size:13px; margin-bottom:18px;}
+        table{width:100%; border-collapse:collapse;}
+        td{padding:10px; border-bottom:1px solid #ddd; font-size:14px;}
+        td.mark-col{width:36px; text-align:center; font-weight:700; font-size:16px; border-right:1px solid #ddd;}
+        th{padding:8px 10px; text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:0.04em; color:#5B6B63; border-bottom:2px solid #14201A;}
+        th.mark-col{width:36px; text-align:center;}
+        .footer{margin-top:36px; font-size:10px; color:#999;}
+        @page{ size: A4; margin: 15mm; }
+        @media print{ body{padding:0;} }
+      </style></head><body>
+      <div class="print-header">
+        ${currentOrgEmblemUrl ? `<img src="${currentOrgEmblemUrl}" alt="${escapeHtml(currentOrgName || "Club emblem")}">` : ""}
+        <img src="${TOTEM_PRINT_LOGO_B64}" alt="Totem">
+      </div>
+      <h1>${escapeHtml(sport ? sport.name : "")} bus register — vs ${escapeHtml(f.opponent)}</h1>
+      <div class="sub">${dateLabel}${f.venue ? " · away at " + escapeHtml(f.venue) : ""} · ${busRiders.length} on the list</div>
+      <table>
+        <tr><th class="mark-col">✓</th><th>Player</th></tr>
+        ${rowsHtml || `<tr><td colspan="2" style="padding:20px; text-align:center; color:#999;">Nobody's confirmed the bus yet.</td></tr>`}
+      </table>
+      <div class="footer">Generated by Totem™ · build your team at totem.hyperianlabs.com</div>
+      </body></html>`);
+    win.document.close();
+    win.focus();
+    win.print();
   }
 
   // ---------- trials (individual sports only) ----------
