@@ -448,7 +448,22 @@
       return;
     }
 
-    const rows = state.players.slice().sort((a,b) => a.name.localeCompare(b.name)).map(p => {
+    // Signed players are the ones needing no action — pushing them to the
+    // bottom means a large roster's handful of actual pending items are
+    // always visible first, without scrolling through everyone who's done.
+    const statusRank = (p) => {
+      const record = recordByPlayer[p.id];
+      if(!record) return 0; // not sent yet — most actionable, first
+      if(!record.signed) return 1; // sent, awaiting — second
+      return 2; // signed — least urgent, last
+    };
+    const sortedPlayers = state.players.slice().sort((a,b) => statusRank(a) - statusRank(b) || a.name.localeCompare(b.name));
+
+    const signedCount = state.players.filter(p => recordByPlayer[p.id] && recordByPlayer[p.id].signed).length;
+    const summaryEl = document.getElementById("consentRegisterSummary");
+    if(summaryEl) summaryEl.textContent = `${signedCount} / ${state.players.length} signed`;
+
+    const rows = sortedPlayers.map(p => {
       const record = recordByPlayer[p.id];
       const statusLabel = record && record.signed ? "Signed" : record ? "Sent — awaiting signature" : "Not sent yet";
       const statusClass = record && record.signed ? "pitch" : record ? "gold" : "slate";
@@ -896,6 +911,7 @@
     unavailable: {},
     venues: [],
     captains: {},
+    athleticsMigrationDone: false,
     activeSport: "netball"
   };
 
@@ -1010,18 +1026,26 @@
     });
     state.results.forEach(r => { if(groupsMatch(r.ageGroup, "Senior")) r.ageGroup = "U18"; });
 
-    // Add the new Athletics sport for anyone who already has saved data from
-    // before it existed (existing sports/players/etc. are left untouched).
-    // Guarded to established accounts only (sports.length > 0) — a brand new
-    // account with zero sports is meant to stay empty until onboarding.
-    if(state.sports.length > 0 && !state.sports.find(s => s.id === "athletics")){
-      state.sports.push(JSON.parse(JSON.stringify(ATHLETICS_TEMPLATE)));
+    // One-time: add the new Athletics sport for anyone who already had saved
+    // data from before it existed. This used to check "is athletics missing"
+    // on every single login — which meant deliberately removing Athletics
+    // later looked identical to "never had it," and it kept getting silently
+    // re-added. Now it only ever runs once per club, tracked by this flag,
+    // so a genuine removal actually sticks.
+    let justRanAthleticsMigration = false;
+    if(!state.athleticsMigrationDone){
+      if(state.sports.length > 0 && !state.sports.find(s => s.id === "athletics")){
+        state.sports.push(JSON.parse(JSON.stringify(ATHLETICS_TEMPLATE)));
+      }
+      state.athleticsMigrationDone = true;
+      justRanAthleticsMigration = true;
     }
 
     storageReady = true;
     render();
     lastAnnouncedTierId = currentRequiredTier().id; // silent baseline — toasts only fire for changes after this
     if(state.sports.length === 0) openSportModal(true);
+    if(justRanAthleticsMigration) saveState(); // lock in the flag now, don't wait for some unrelated edit to trigger a save
   }
   async function saveState(){
     if(isDemoMode) return; // demo data lives in-memory only, never touches Supabase

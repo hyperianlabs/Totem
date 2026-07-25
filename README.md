@@ -350,6 +350,18 @@ This replaces the old Word-doc process, as agreed — **Club Settings → Consen
 
 No migration needed, pure code. The fixture list below the calendar now only shows what's still ahead — nothing's deleted, past fixtures and their results are exactly where they always were, just navigate the calendar back a month to browse them directly.
 
+## Fixed: removed sports (like Athletics) silently reappearing on login
+
+Real bug, found and fixed. The migration that originally added Athletics as a new sport option ran on *every* login, not just once — and it had no way to tell "this club never had Athletics" apart from "this club deliberately removed Athletics." Both looked identical to that check, so a genuine removal kept getting silently undone the next time you signed in.
+
+**Worth knowing:** because of how this bug worked, Athletics will come back **one more time** on your very first login after this update — that's expected, not a sign the fix didn't work. After that one-time reappearance, remove it again and it will genuinely stay removed from then on, verified against the exact logic that was causing this.
+
+## Consent register — built for a large roster from the start
+
+No migration needed, pure code. Worth clarifying how this list actually works, since it's easy to picture it wrong: it's **one row per player**, not one row per signed document — there's a database rule enforcing exactly one record per player, so nothing piles up from resends. The list also already scrolls internally within a fixed height rather than stretching Club Settings itself.
+
+Added on top of that: unsigned and pending players now always sort to the top, with everyone already signed pushed to the bottom — so a roster of any size shows you what actually needs attention first, without scrolling past everyone who's already done. A running "X / Y signed" count sits right above the list too.
+
 ## Roadmap — not built yet, worth revisiting later
 
 **Offline capture for attendance & results.** Coaches taking attendance or capturing a result on a field with no signal currently just fails — there's no local queue or auto-sync yet. Worth building once there's real evidence it's actually costing someone data (a coach genuinely losing a captured result), rather than pre-emptively — right now, growing the customer base matters more than smoothing this edge case. Scoped narrowly to just attendance + results if/when it's built, not the whole app, since those are the two actions most likely to happen with zero signal and least likely to have two people editing the same thing at once.
