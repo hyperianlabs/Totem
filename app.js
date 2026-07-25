@@ -1845,6 +1845,8 @@
         const p = state.players.find(pl => pl.id === id);
         if(!p) return;
         p.vo2max = e.target.value ? +e.target.value : null;
+        const group = ageGroupForPlayer(p);
+        if(group) recomputeVo2FitnessFor(p.sportId, [group]);
         saveState(); render();
       });
     });
@@ -2753,6 +2755,38 @@
         const pct = attendancePercentForPlayer(p);
         if(pct !== null) p.metrics.reliability = reliabilityFromAttendance(pct);
       });
+  }
+  // Once at least 90% of an age group has a VO2 max on file, "fitness"
+  // switches from a manual rating to one computed from VO2 max — ranked
+  // relative to that same age group only, deliberately never compared
+  // across age groups. Wearables/fitness-device uptake tends to skew much
+  // higher among older age groups than younger ones, so a fixed universal
+  // scale would quietly penalize younger groups just for having less
+  // consistent data, not less fitness. A player with no VO2 reading keeps
+  // their manual fitness rating even once their group crosses 90% — there's
+  // nothing to compute for them specifically.
+  const VO2_COVERAGE_THRESHOLD = 0.9;
+  function recomputeVo2FitnessFor(sportId, ageGroups){
+    const hasFitnessField = state.metricFields.some(f => f.key === "fitness");
+    if(!hasFitnessField) return;
+
+    ageGroups.forEach(group => {
+      const groupPlayers = state.players.filter(p => p.sportId === sportId && groupsMatch(group, ageGroupForPlayer(p)));
+      if(groupPlayers.length === 0) return;
+
+      const withVo2 = groupPlayers.filter(p => typeof p.vo2max === "number");
+      const coverage = withVo2.length / groupPlayers.length;
+      if(coverage < VO2_COVERAGE_THRESHOLD) return; // not enough data yet — leave fitness as manually set
+
+      const values = withVo2.map(p => p.vo2max);
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+
+      withVo2.forEach(p => {
+        const score = (max === min) ? 5.5 : 1 + 9 * (p.vo2max - min) / (max - min);
+        p.metrics.fitness = Math.round(score * 10) / 10;
+      });
+    });
   }
   // Fastest recorded trial time for a player in a specific event/age group,
   // across every trial captured for that sport — used to rank individual-sport
@@ -4670,6 +4704,8 @@
     };
     state.players.push(newPlayer);
     sendConsentRequest(newPlayer);
+    const newPlayerGroup = ageGroupForPlayer(newPlayer);
+    if(newPlayerGroup) recomputeVo2FitnessFor(newPlayer.sportId, [newPlayerGroup]);
     nameInp.value = ""; dobInp.value = ""; vo2Inp.value = ""; guardianPhoneInp.value = ""; guardianEmailInp.value = "";
     document.querySelectorAll("#inPositionsMulti input:checked").forEach(i => i.checked = false);
     document.getElementById("inPositionsMulti").classList.remove("open");
