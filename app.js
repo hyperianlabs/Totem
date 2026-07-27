@@ -2512,7 +2512,7 @@
       </div>
       <div class="sides-board">${groupsHtml}</div>
       ${availabilityHtml}
-      ${isAway ? `<div class="section-title" style="margin-top:24px;"><h2 style="font-size:18px;">🚌 Bus register</h2><span class="sub">who's confirmed transport so far</span></div><div id="busRegisterSection"><div class="dash-empty">Loading…</div></div>` : ""}
+      ${isAway ? `<div class="section-title" style="margin-top:24px;"><h2 style="font-size:18px; display:flex; align-items:center; gap:8px;">${uiIcon("bus", 20)} Bus register</h2><span class="sub">who's confirmed transport so far</span></div><div id="busRegisterSection"><div class="dash-empty">Loading…</div></div>` : ""}
     `;
 
     wireSlotSelects(el);
@@ -4625,7 +4625,8 @@
     envelope: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 6.5 8 6.5 8-6.5"/>',
     flag: '<path d="M5 3v18"/><path d="M5 4c2-1 4-1 6 0s4 1 6 0v8c-2 1-4 1-6 0s-4-1-6 0z"/>',
     chat: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
-    warning: '<path d="M12 3.5 21.5 20h-19z"/><path d="M12 9.5v4.2M12 17h.01"/>'
+    warning: '<path d="M12 3.5 21.5 20h-19z"/><path d="M12 9.5v4.2M12 17h.01"/>',
+    bus: '<rect x="2.5" y="5.5" width="19" height="9.5" rx="2"/><path d="M2.5 11h19"/><path d="M6.5 5.5v5.5M11.5 5.5v5.5M16.5 5.5v5.5"/><circle cx="7" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/>'
   };
   function uiIcon(key, size, extraClass){
     const px = size || 16;
