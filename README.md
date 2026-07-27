@@ -366,6 +366,16 @@ Added on top of that: unsigned and pending players now always sort to the top, w
 
 No migration needed, pure code. Once 90% or more of an age group has a VO2 max on file, the fitness rating for anyone in that group *with* a reading switches from manual to computed automatically — ranked purely against their own age group, never across ages. That's deliberate: wearable/fitness-app uptake tends to differ a lot by age (older players are simply more likely to have a device recording this), so comparing across ages on a fixed scale would quietly penalize younger groups for a data gap, not an actual fitness difference. A player with no VO2 reading keeps their manual rating even once their group crosses 90% — there's nothing to compute for them specifically. Verified the actual scoring math directly: the lowest VO2 in a group lands exactly on 1, the highest exactly on 10, and a group where everyone's identical correctly lands everyone at a neutral 5.5 rather than dividing by zero.
 
+## Save-conflict detection — no more silent overwrites
+
+**New migration:** `migration-save-conflict-detection.sql` — adds a database trigger, nothing else. Worth reading the comments at the top of that file; they explain the actual risk this closes.
+
+**The problem this fixes:** your whole club's data — roster, fixtures, results, everything — has always been saved as one combined blob every time anything changes. If two tabs, two devices, or two staff members had the app open at once, whoever saved second would silently and completely overwrite whoever saved first, with zero warning and nothing to undo. This hadn't caused a visible problem yet, but it was a real, structural risk sitting underneath everything else built this session.
+
+**How it's fixed:** every save now has to prove it's still working from the current version of the data. If someone else has saved in between, the save is rejected rather than silently overwriting — you'll see a direct message explaining what happened, with the choice to reload and see the latest version (recommended) or continue and try again. Verified the actual conflict-detection logic directly against the real scenarios that matter: two sessions racing (correctly catches it), recovering after a reload (correctly resumes normal saving), and — most importantly — confirmed that ordinary, sequential saves from a single session never falsely trigger a conflict warning.
+
+This applies everywhere in the app automatically, from one central change — nothing else needed touching.
+
 ## Roadmap — not built yet, worth revisiting later
 
 **Offline capture for attendance & results.** Coaches taking attendance or capturing a result on a field with no signal currently just fails — there's no local queue or auto-sync yet. Worth building once there's real evidence it's actually costing someone data (a coach genuinely losing a captured result), rather than pre-emptively — right now, growing the customer base matters more than smoothing this edge case. Scoped narrowly to just attendance + results if/when it's built, not the whole app, since those are the two actions most likely to happen with zero signal and least likely to have two people editing the same thing at once.

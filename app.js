@@ -937,24 +937,65 @@
   let resultDraft = null;
 
   // ---------- storage ----------
+  // Tracks the server's updated_at from the last time we loaded or
+  // successfully saved. Every save has to prove it's still working from
+  // this exact version — if someone else has saved in between (another
+  // tab, another staff member, another device), the save below will
+  // affect zero rows instead of silently overwriting their changes.
+  let lastKnownUpdatedAt = null;
+  let conflictDialogShowing = false;
+
   async function fetchClubState(){
     const { data, error } = await supabaseClient
       .from("org_state")
-      .select("data")
+      .select("data, updated_at")
       .eq("org_id", currentOrgId)
       .single();
     if(error){
       console.warn("Totem: could not load club data —", error.message);
       return null;
     }
+    if(data) lastKnownUpdatedAt = data.updated_at;
     return data ? data.data : null;
   }
   async function persistClubState(){
-    const { error } = await supabaseClient
+    let query = supabaseClient
       .from("org_state")
-      .update({ data: state, updated_at: new Date().toISOString(), updated_by: currentUser ? currentUser.id : null })
+      .update({ data: state, updated_by: currentUser ? currentUser.id : null })
       .eq("org_id", currentOrgId);
-    if(error) console.warn("Totem: could not save —", error.message);
+
+    if(lastKnownUpdatedAt) query = query.eq("updated_at", lastKnownUpdatedAt);
+
+    const { data, error } = await query.select("updated_at");
+
+    if(error){
+      console.warn("Totem: could not save —", error.message);
+      return;
+    }
+
+    if(!data || data.length === 0){
+      // The row exists (org_id is valid) but the updated_at guard didn't
+      // match — someone else saved since we last loaded. Don't silently
+      // overwrite whatever they just changed.
+      await handleSaveConflict();
+      return;
+    }
+
+    lastKnownUpdatedAt = data[0].updated_at;
+  }
+  async function handleSaveConflict(){
+    if(conflictDialogShowing) return; // a rapid burst of edits shouldn't stack multiple dialogs
+    conflictDialogShowing = true;
+    const wantsReload = confirm(
+      "This club's data was updated somewhere else — another tab, device, or staff member — since you last loaded it.\n\n" +
+      "Click OK to reload the latest version now (anything you just changed on this screen will be lost).\n" +
+      "Click Cancel to keep working here for now — but saving will keep failing the same way until you reload."
+    );
+    if(wantsReload){
+      await loadState();
+      showToast("Reloaded the latest version.");
+    }
+    conflictDialogShowing = false;
   }
 
   async function loadState(){
