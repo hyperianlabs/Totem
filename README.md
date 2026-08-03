@@ -376,6 +376,16 @@ No migration needed, pure code. Once 90% or more of an age group has a VO2 max o
 
 This applies everywhere in the app automatically, from one central change — nothing else needed touching.
 
+## Mobile UX pass — genuinely mobile-native, not desktop shrunk down
+
+No migration needed, pure front-end. Prompted by a set of mobile-first principles from a sister project (BirdieBook) — worth noting the *code* didn't transfer directly, since that's a Tailwind/Next.js app and this one is plain HTML/CSS/JS, but the underlying ideas did:
+
+- **Fixed the classic mobile `100vh` trap** in the two places it existed (the modal max-height and the login screen) — `vh` is measured before a phone's browser address bar collapses, which can clip content or cause unexpected scroll. Now uses `svh` with a safe fallback for older browsers.
+- **Built a genuinely separate mobile nav**, not a CSS-shrunk version of the desktop one. Previously, mobile got the exact same horizontally-scrolling pill row as desktop, just squeezed. Now mobile gets a proper slim header with a hamburger, opening an off-canvas drawer — the same pattern used in BirdieBook, adapted to this project's plain-CSS approach rather than Tailwind's breakpoint prefixes.
+- **Added a global Escape-key handler** covering all 10 of the app's modals (plus the new nav drawer) from one place, and a global `prefers-reduced-motion` rule so anyone with that OS-level preference set gets instant state changes instead of forced animations, everywhere in the app at once.
+
+**Deliberately not done:** a full rewrite of the stylesheet to mobile-first breakpoint ordering. The current desktop-first approach (`max-width` overrides) was already deliberately built and tested for mobile across earlier sessions — restructuring the entire cascade direction would be a large, real risk for what's mostly a code-organization preference rather than a rendering difference, given the mobile output already works correctly.
+
 ## Roadmap — not built yet, worth revisiting later
 
 **Offline capture for attendance & results.** Coaches taking attendance or capturing a result on a field with no signal currently just fails — there's no local queue or auto-sync yet. Worth building once there's real evidence it's actually costing someone data (a coach genuinely losing a captured result), rather than pre-emptively — right now, growing the customer base matters more than smoothing this edge case. Scoped narrowly to just attendance + results if/when it's built, not the whole app, since those are the two actions most likely to happen with zero signal and least likely to have two people editing the same thing at once.

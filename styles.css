@@ -118,6 +118,41 @@
   .quicknav button:hover{background:#E4E9DF; color:var(--pitch-deep);}
   .quicknav button.active{background:var(--pitch); color:#fff; border-color:var(--pitch);}
 
+  /* ===== Mobile nav: hamburger + off-canvas drawer =====
+     A deliberately different component from .quicknav above, not a
+     CSS-shrunk version of it — hidden entirely on desktop, and only
+     swapped in under the mobile breakpoint further down this file. */
+  .mobile-nav-bar{display:none;}
+  .mobile-nav-trigger{
+    display:flex; align-items:center; gap:10px; width:100%; height:56px; padding:0 20px;
+    background:var(--panel); border:none; border-bottom:1px solid var(--line);
+    font-family:'Inter',sans-serif; font-size:14px; font-weight:700; color:var(--ink); cursor:pointer;
+  }
+  .mobile-nav-trigger:active{background:var(--chalk);}
+
+  .mobile-nav-overlay{
+    justify-content:flex-start; /* drawer hugs the left edge instead of centering like a modal */
+    background:rgba(20,32,26,0.45);
+  }
+  .mobile-nav-drawer{
+    background:var(--panel); width:min(78vw,300px); height:100%; height:100svh;
+    padding:20px 14px; display:flex; flex-direction:column; gap:4px;
+    transform:translateX(-100%); transition:transform .22s ease;
+    box-shadow:0 0 30px rgba(0,0,0,0.2);
+  }
+  .mobile-nav-overlay.open .mobile-nav-drawer{transform:translateX(0);}
+  .mobile-nav-close{
+    align-self:flex-end; background:var(--chalk); border:1px solid var(--line); border-radius:8px;
+    width:34px; height:34px; display:flex; align-items:center; justify-content:center;
+    color:var(--slate); cursor:pointer; margin-bottom:10px;
+  }
+  .mobile-nav-drawer button[data-target]{
+    text-align:left; padding:13px 14px; border-radius:9px; border:none; background:transparent;
+    font-family:'Inter',sans-serif; font-size:15px; font-weight:700; color:var(--ink); cursor:pointer;
+  }
+  .mobile-nav-drawer button[data-target]:hover{background:var(--chalk);}
+  .mobile-nav-drawer button[data-target].active{background:var(--pitch); color:#fff;}
+
   .back-to-top{
     position:fixed; bottom:20px; right:20px; width:42px; height:42px; border-radius:50%;
     background:var(--pitch-deep); color:#fff; border:none; box-shadow:0 4px 14px rgba(0,0,0,0.25);
@@ -289,7 +324,7 @@
   .modal{
     background:var(--panel); border-radius:var(--radius); padding:22px; width:100%; max-width:380px;
     box-shadow:0 12px 40px rgba(0,0,0,0.25);
-    max-height:90vh; overflow-y:auto;
+    max-height:90vh; max-height:90svh; overflow-y:auto;
   }
   .modal h3{margin:0 0 14px; font-family:'Bebas Neue',sans-serif; font-size:22px; letter-spacing:0.03em; color:var(--pitch-deep);}
   .modal .field{width:100%; margin-bottom:12px;}
@@ -603,6 +638,8 @@
     .add-form{flex-direction:column; align-items:stretch;}
     .field.grow{min-width:0;}
     .cal-cell{min-height:56px;}
+    .quicknav{display:none;}
+    .mobile-nav-bar{display:block; position:sticky; top:0; z-index:40;}
     .calendar-title{min-width:0;}
     .field input, .field select, .field textarea{width:100% !important; min-width:0 !important;}
     .modal{padding:18px;}
@@ -627,7 +664,7 @@
 
 /* ===== Auth screen ===== */
 .auth-shell{
-  min-height:100vh; display:flex; align-items:center; justify-content:center;
+  min-height:100vh; min-height:100svh; display:flex; align-items:center; justify-content:center;
   background:var(--brand-navy); padding:20px; position:relative; overflow:hidden;
 }
 .auth-shell::after{
@@ -718,4 +755,17 @@
 #btnLogout{color:var(--clay);}
 @media (max-width:900px){
   .header-account{position:relative; top:auto; right:auto; z-index:50; margin-bottom:16px; display:flex; justify-content:flex-start;}
+}
+
+/* Respects the OS-level "reduce motion" preference — someone who's turned
+   this on gets instant state changes instead of animated ones, everywhere
+   in the app, from this one rule rather than guarding each transition
+   individually. */
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{
+    animation-duration:0.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:0.001ms !important;
+    scroll-behavior:auto !important;
+  }
 }

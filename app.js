@@ -4907,18 +4907,29 @@
   })();
 
   (function setupQuickNav(){
-    const navBtns = Array.from(document.querySelectorAll(".quicknav button"));
-    const sections = navBtns
-      .map(b => document.getElementById(b.dataset.target))
-      .filter(Boolean);
+    // Both the desktop quicknav and the mobile drawer expose the exact
+    // same data-target buttons — genuinely two separate components for
+    // two separate contexts, not one component's CSS stretched to cover
+    // both, so every interaction here is wired to apply to both sets at once.
+    const allNavBtns = Array.from(document.querySelectorAll('[data-target]'));
+    const uniqueTargets = [...new Set(allNavBtns.map(b => b.dataset.target))];
+    const sections = uniqueTargets.map(id => document.getElementById(id)).filter(Boolean);
+    const mobileLabel = document.getElementById("mobileNavCurrentLabel");
 
-    navBtns.forEach(btn => {
+    function setActiveTarget(targetId){
+      allNavBtns.forEach(b => b.classList.toggle("active", b.dataset.target === targetId));
+      const matchingBtn = allNavBtns.find(b => b.dataset.target === targetId);
+      if(mobileLabel && matchingBtn) mobileLabel.textContent = matchingBtn.textContent;
+    }
+
+    allNavBtns.forEach(btn => {
       btn.addEventListener("click", () => {
         const target = document.getElementById(btn.dataset.target);
         if(!target) return;
-        const navHeight = document.getElementById("quicknav").offsetHeight;
+        const navHeight = document.getElementById(document.body.clientWidth <= 900 ? "mobileNavBar" : "quicknav").offsetHeight;
         const top = target.getBoundingClientRect().top + window.pageYOffset - navHeight - 10;
         window.scrollTo({ top, behavior: "smooth" });
+        closeMobileDrawer(); // no-op harmlessly if this was a desktop quicknav button
       });
     });
 
@@ -4926,10 +4937,7 @@
       const observer = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
           if(!entry.isIntersecting) return;
-          const btn = navBtns.find(b => b.dataset.target === entry.target.id);
-          if(!btn) return;
-          navBtns.forEach(b => b.classList.remove("active"));
-          btn.classList.add("active");
+          setActiveTarget(entry.target.id);
         });
       }, { rootMargin: "-56px 0px -70% 0px", threshold: 0 });
       sections.forEach(sec => observer.observe(sec));
@@ -4940,5 +4948,31 @@
       backBtn.classList.toggle("show", window.scrollY > 600);
     });
     backBtn.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+
+    // Mobile drawer open/close — reuses the same .overlay/.open convention
+    // every other modal in the app already uses, so it's automatically
+    // covered by the existing Escape-key handler and backdrop-click pattern.
+    const mobileOverlay = document.getElementById("mobileNavOverlay");
+    function openMobileDrawer(){
+      mobileOverlay.classList.add("open");
+      document.getElementById("mobileNavTrigger").setAttribute("aria-expanded", "true");
+    }
+    function closeMobileDrawer(){
+      mobileOverlay.classList.remove("open");
+      document.getElementById("mobileNavTrigger").setAttribute("aria-expanded", "false");
+    }
+    document.getElementById("mobileNavTrigger").addEventListener("click", openMobileDrawer);
+    document.getElementById("mobileNavClose").addEventListener("click", closeMobileDrawer);
+    mobileOverlay.addEventListener("click", (e) => {
+      if(e.target.id === "mobileNavOverlay") closeMobileDrawer();
+    });
+
+    // Escape closes whichever modal is currently open — covers all of them
+    // from one place, rather than wiring this into each modal individually.
+    document.addEventListener("keydown", (e) => {
+      if(e.key !== "Escape") return;
+      const openOverlay = document.querySelector(".overlay.open");
+      if(openOverlay) openOverlay.classList.remove("open");
+    });
   })();
 })();

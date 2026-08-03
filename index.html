@@ -114,6 +114,28 @@
   <button type="button" data-target="sec-leaderboard">Leaderboard</button>
 </nav>
 
+<div class="mobile-nav-bar" id="mobileNavBar">
+  <button type="button" class="mobile-nav-trigger" id="mobileNavTrigger" aria-label="Open menu" aria-expanded="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" width="20" height="20"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+    <span id="mobileNavCurrentLabel">Coaches</span>
+  </button>
+</div>
+
+<div class="overlay mobile-nav-overlay" id="mobileNavOverlay">
+  <nav class="mobile-nav-drawer" id="mobileNavDrawer" aria-label="Section navigation">
+    <button type="button" class="mobile-nav-close" id="mobileNavClose" aria-label="Close menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" width="18" height="18"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <button type="button" data-target="sec-coaches">Coaches</button>
+    <button type="button" data-target="sec-fixtures">Fixtures</button>
+    <button type="button" data-target="sec-picks">Picks</button>
+    <button type="button" data-target="sec-roster">Roster</button>
+    <button type="button" data-target="sec-sides">Sides</button>
+    <button type="button" data-target="sec-results">Results</button>
+    <button type="button" data-target="sec-leaderboard">Leaderboard</button>
+  </nav>
+</div>
+
 <div class="usage-banner" id="usageBanner" style="display:none;"></div>
 
 <main>
