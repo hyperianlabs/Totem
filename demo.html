@@ -17,8 +17,28 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
+<style>
+  .back-to-totem{
+    position:fixed; top:14px; left:14px; z-index:300;
+    display:none; align-items:center; gap:6px;
+    background:rgba(10,28,44,0.88); color:#EAF3EF; text-decoration:none;
+    font-family:'Inter',sans-serif; font-size:13px; font-weight:700;
+    padding:9px 14px; border-radius:999px; border:1px solid rgba(255,255,255,0.22);
+    backdrop-filter:blur(6px);
+  }
+  .back-to-totem:hover{background:rgba(10,28,44,0.96);}
+</style>
 </head>
 <body>
+
+<a href="landing.html" class="back-to-totem" id="backToTotem">← Back to Totem</a>
+<script>
+  // Only show this when the demo is opened directly (e.g. a shared link),
+  // not when it's embedded inside the landing page's lightbox, which already has a Close button.
+  if(window.self === window.top){
+    document.getElementById("backToTotem").style.display = "flex";
+  }
+</script>
 
 <div class="auth-shell" id="authShell">
   <div class="auth-card">

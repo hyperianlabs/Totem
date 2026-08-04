@@ -218,6 +218,7 @@
       <span class="word">TOTEM</span>
     </a>
     <div class="nav-actions">
+      <button type="button" class="btn btn-ghost-light" onclick="openDemo()">Live demo</button>
       <a href="index.html" class="btn btn-ghost-light">Log in</a>
       <a href="index.html?mode=signup&amp;ref=landing" class="btn btn-mint">Start free trial</a>
     </div>
@@ -343,7 +344,7 @@
       </div>
     </div>
     <p style="text-align:center; margin-top:36px; font-size:14.5px; color:var(--slate);">
-      Prefer to see it running with real data? <a href="demo.html" style="color:var(--pitch); font-weight:700; text-decoration:underline;">Try the live demo</a> — a full Rugby squad, fixtures, and results already loaded, no signup needed.
+      Prefer to see it running with real data? <a href="demo.html" onclick="return openDemo(event)" style="color:var(--pitch); font-weight:700; text-decoration:underline; cursor:pointer;">Try the live demo</a> — a full Rugby squad, fixtures, and results already loaded, no signup needed.
     </p>
   </div>
 </section>
@@ -482,6 +483,56 @@
     <span class="f-legal">Totem™ is a trademark of © 2026 Hyperian Labs.</span>
   </div>
 </footer>
+<!-- Live demo lightbox: the iframe is only given a src when opened, so demo.html
+     (a full interactive app) never loads unless someone actually clicks through. -->
+<div class="demo-modal" id="demoModal" role="dialog" aria-modal="true" aria-label="Totem live demo">
+  <div class="demo-modal-bar">
+    <span class="demo-modal-label">Live demo · sample data, no signup needed</span>
+    <button type="button" class="demo-modal-close" onclick="closeDemo()" aria-label="Close demo">✕ Close</button>
+  </div>
+  <iframe id="demoFrame" title="Totem live demo" loading="lazy"></iframe>
+</div>
+
+<style>
+  .demo-modal{
+    position:fixed; inset:0; z-index:200; background:var(--navy-deep);
+    display:none; flex-direction:column;
+  }
+  .demo-modal.open{display:flex;}
+  .demo-modal-bar{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 20px; background:var(--navy); border-bottom:1px solid rgba(255,255,255,0.1);
+    flex-shrink:0;
+  }
+  .demo-modal-label{color:#C7D6CD; font-size:13px; font-weight:600;}
+  .demo-modal-close{
+    background:transparent; border:1px solid rgba(255,255,255,0.28); color:#EAF3EF;
+    border-radius:8px; padding:8px 14px; font-weight:700; font-size:13px; cursor:pointer;
+    font-family:'Inter',sans-serif;
+  }
+  .demo-modal-close:hover{background:rgba(255,255,255,0.08);}
+  .demo-modal iframe{flex:1; width:100%; border:none; background:#fff;}
+  body.demo-open{overflow:hidden;}
+</style>
+
+<script>
+  function openDemo(evt){
+    if(evt) evt.preventDefault();
+    var frame = document.getElementById("demoFrame");
+    if(!frame.src) frame.src = "demo.html"; // only load the app the first time it's opened
+    document.getElementById("demoModal").classList.add("open");
+    document.body.classList.add("demo-open");
+    return false;
+  }
+  function closeDemo(){
+    document.getElementById("demoModal").classList.remove("open");
+    document.body.classList.remove("demo-open");
+  }
+  document.addEventListener("keydown", function(e){
+    if(e.key === "Escape") closeDemo();
+  });
+</script>
+
 <script>
   document.getElementById("footerLogoImg").src = document.querySelector(".nav-logo-img").src;
 </script>
