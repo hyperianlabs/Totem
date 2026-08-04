@@ -896,6 +896,12 @@
     {key:"teamSpirit", label:"Team Spirit"}
   ];
 
+  // Fitness and reliability drive automated backend recalculation
+  // (recomputeVo2FitnessFor / recomputeReliabilityFor look these keys up by
+  // name) — renaming or removing either field would silently break that,
+  // so they're locked in the metric manager UI.
+  const PROTECTED_METRIC_KEYS = ["fitness", "reliability"];
+
   let state = {
     sports: [],
     metricFields: JSON.parse(JSON.stringify(DEFAULT_FIELDS)),
@@ -1666,24 +1672,31 @@
     const list = document.getElementById("metricFieldList");
     list.innerHTML = "";
     state.metricFields.forEach((f, idx) => {
+      const isProtected = PROTECTED_METRIC_KEYS.includes(f.key);
       const row = document.createElement("div");
       row.className = "metric-manager-row";
-      row.innerHTML = `
+      row.innerHTML = isProtected
+        ? `
+        <input type="text" data-idx="${idx}" class="field-rename" value="${escapeHtml(f.label)}" disabled title="Auto-calculated by Totem — can't be renamed or removed.">
+        <button class="btn btn-danger btn-small" data-idx="${idx}" data-action="remove-field" disabled title="Auto-calculated by Totem — can't be renamed or removed.">Locked</button>
+      `
+        : `
         <input type="text" data-idx="${idx}" class="field-rename" value="${escapeHtml(f.label)}">
         <button class="btn btn-danger btn-small" data-idx="${idx}" data-action="remove-field">Remove</button>
       `;
       list.appendChild(row);
     });
-    list.querySelectorAll(".field-rename").forEach(inp => {
+    list.querySelectorAll(".field-rename:not([disabled])").forEach(inp => {
       inp.addEventListener("change", (e) => {
         const idx = +e.target.dataset.idx;
         state.metricFields[idx].label = e.target.value.trim() || state.metricFields[idx].label;
         saveState(); render();
       });
     });
-    list.querySelectorAll('[data-action="remove-field"]').forEach(btn => {
+    list.querySelectorAll('[data-action="remove-field"]:not([disabled])').forEach(btn => {
       btn.addEventListener("click", (e) => {
         const idx = +e.target.dataset.idx;
+        if(PROTECTED_METRIC_KEYS.includes(state.metricFields[idx].key)) return; // belt-and-braces alongside the disabled button
         if(state.metricFields.length <= 1){ alert("Keep at least one metric field."); return; }
         state.metricFields.splice(idx,1);
         saveState(); render();
