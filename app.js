@@ -268,9 +268,14 @@
       if(signupType === "join" && !inviteCode){ authError("Enter the invite code your club admin gave you."); return; }
 
       if(signupType === "join"){
-        const { data: joinOrgName, error: lookupError } = await supabaseClient.rpc("get_org_name_for_invite_code", { code: inviteCode });
-        if(lookupError || !joinOrgName){ authError("That invite code wasn't recognized — double check it with your club admin."); return; }
-        if(!confirm(`You're about to join: ${joinOrgName}\n\nIs this your club?`)) return;
+        const { data: lookupResult, error: lookupError } = await supabaseClient.functions.invoke("check-invite-code", { body: { code: inviteCode } });
+        if(lookupError){
+          const tooMany = lookupError.context && lookupError.context.status === 429;
+          authError(tooMany ? "Too many attempts — please wait a few minutes and try again." : "Couldn't check that invite code right now — try again shortly.");
+          return;
+        }
+        if(!lookupResult || !lookupResult.name){ authError("That invite code wasn't recognized — double check it with your club admin."); return; }
+        if(!confirm(`You're about to join: ${lookupResult.name}\n\nIs this your club?`)) return;
       }
 
       const { data, error } = await supabaseClient.auth.signUp({
