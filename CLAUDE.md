@@ -14,9 +14,14 @@ Trademark: Totem™ is a trademark of D.S.Blom.
   interactive demo, no login, no Supabase calls), `privacy.html`,
   `consent-response.html`, `transport-response.html`.
 - **Backend**: Supabase (project ID `tiieaubyrjcsgiaegikb`, region eu-central-1).
-  Edge functions live in `supabase/functions/`. SQL migrations in
-  `supabase/migrations/` (20+ so far — multitenant, POPIA consent, transport,
-  Paystack, staff management, save-conflict detection, etc.) plus `schema.sql`.
+  Edge functions live in `supabase/functions/`. SQL migrations live in
+  `supabase/migrations/`, tracked properly via the Supabase CLI (see
+  "Migrations workflow" below) — this replaced a legacy setup of loose
+  `migration-*.sql` files at the repo root that had to be manually pasted
+  into the SQL Editor, which is why several were silently never applied for
+  weeks (found and fixed 2026-08-04: staff management, owner-delete,
+  save-conflict detection, signup-source tracking, and the entire
+  payments/Paystack column set).
 - **Email**: Resend (transactional).
 - **Payments**: Paystack, via `paystack-webhook` edge function.
 - **Hosting**: **Vercel** (project "totem" under the Hyperianlabs team), live at
@@ -34,6 +39,33 @@ retired. Never suggest re-introducing a zip-based deploy step.
 
 If DNS or domain config ever needs touching, that's in the Vercel dashboard
 (Domains tab) plus Porkbun — not something this repo controls.
+
+## Migrations workflow
+
+The project is linked (`supabase link --project-ref tiieaubyrjcsgiaegikb`).
+For any schema change:
+
+1. `supabase migration new <short_name>` — creates a timestamped file in
+   `supabase/migrations/`.
+2. Write the SQL in that file.
+3. `supabase db push --linked` — applies it and records it in
+   `supabase_migrations.schema_migrations`, so it can never be silently
+   skipped again.
+
+**Docker is not installed in this environment**, so `supabase db pull`,
+`supabase db dump`, and `supabase db diff` (which need a local shadow
+database) won't work here. `supabase db push --linked`, `supabase migration
+list --linked`, and `supabase db query --linked` all connect directly via
+the Management API and work fine without Docker — use `db query --linked`
+for one-off inspection/verification instead of reaching for `db diff`. If
+Docker Desktop ever gets installed, the full toolset (including `db pull`
+for re-syncing from a schema change made directly in the dashboard) opens
+up.
+
+Never go back to editing the database by pasting loose `.sql` files into
+the SQL Editor by hand — that's the exact failure mode that caused several
+features (staff management, club self-deletion, save-conflict protection,
+payments) to silently not work for weeks.
 
 ## Hard-won lessons (don't relearn these the hard way)
 
