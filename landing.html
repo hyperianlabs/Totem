@@ -60,6 +60,18 @@
   .btn-pitch{background:var(--pitch); color:#fff;}
   .btn-pitch:hover{filter:brightness(1.08);}
   .btn-lg{padding:15px 28px; font-size:16px;}
+  .nav-cta-short{display:none;}
+
+  @media (max-width:640px){
+    .nav-row{padding:12px 16px; gap:8px;}
+    .nav-logo-img{height:28px;}
+    .nav-brand .word{font-size:18px;}
+    .nav-actions{gap:6px;}
+    .nav-actions .btn{padding:8px 10px; font-size:12px; white-space:nowrap;}
+    .nav-login{background:none; border:none; padding:8px 2px; text-decoration:underline; text-underline-offset:3px;}
+    .nav-cta-full{display:none;}
+    .nav-cta-short{display:inline;}
+  }
 
   /* ---------- hero ---------- */
   .hero{
@@ -80,7 +92,16 @@
   .hero h1 .accent{color:var(--mint);}
   .hero p.lede{font-size:18px; color:#C7D6CD; max-width:520px; margin-bottom:32px; line-height:1.65;}
   .hero-ctas{display:flex; gap:14px; flex-wrap:wrap; margin-bottom:18px;}
-  .hero-note{font-size:13px; color:#8FA79C;}
+  .hero-note{font-size:13px; color:#8FA79C; margin-bottom:16px;}
+  .watch-overview{
+    display:inline-flex; align-items:center; gap:8px; color:var(--mint); font-size:14px; font-weight:700;
+    text-decoration:none; cursor:pointer;
+  }
+  .watch-overview .play-glyph{
+    display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%;
+    background:rgba(48,239,198,0.16); border:1px solid rgba(48,239,198,0.4); flex-shrink:0; font-size:10px; padding-left:2px;
+  }
+  .watch-overview:hover{text-decoration:underline;}
 
   /* signature visual: rating-justified roster card */
   .proof-card{
@@ -219,8 +240,8 @@
     </a>
     <div class="nav-actions">
       <button type="button" class="btn btn-ghost-light" onclick="openDemo()">Live demo</button>
-      <a href="index.html" class="btn btn-ghost-light">Log in</a>
-      <a href="index.html?mode=signup&amp;ref=landing" class="btn btn-mint">Start free trial</a>
+      <a href="index.html" class="btn btn-ghost-light nav-login">Log in</a>
+      <a href="index.html?mode=signup&amp;ref=landing" class="btn btn-mint"><span class="nav-cta-full">Start free trial</span><span class="nav-cta-short">Free trial</span></a>
     </div>
   </div>
 </header>
@@ -236,6 +257,7 @@
         <a href="#how" class="btn btn-ghost-light btn-lg">See how it works</a>
       </div>
       <p class="hero-note">No card required to try it. Free for as long as you're getting set up.</p>
+      <a href="#" class="watch-overview" onclick="return openVideo(event)"><span class="play-glyph">▶</span> Watch the 60-second overview</a>
     </div>
     <div class="proof-card">
       <div class="pc-head">
@@ -493,6 +515,16 @@
   <iframe id="demoFrame" title="Totem live demo" loading="lazy"></iframe>
 </div>
 
+<!-- Overview video lightbox: same lazy-load pattern as the demo modal above —
+     the video only gets a src (and only starts loading/playing) once someone clicks through. -->
+<div class="demo-modal video-modal" id="videoModal" role="dialog" aria-modal="true" aria-label="Totem 60-second overview">
+  <div class="demo-modal-bar">
+    <span class="demo-modal-label">60-second overview</span>
+    <button type="button" class="demo-modal-close" onclick="closeVideo()" aria-label="Close video">✕ Close</button>
+  </div>
+  <video id="overviewVideo" controls playsinline></video>
+</div>
+
 <style>
   .demo-modal{
     position:fixed; inset:0; z-index:200; background:var(--navy-deep);
@@ -512,6 +544,8 @@
   }
   .demo-modal-close:hover{background:rgba(255,255,255,0.08);}
   .demo-modal iframe{flex:1; width:100%; border:none; background:#fff;}
+  .video-modal{align-items:center; justify-content:center;}
+  .video-modal video{flex:1; width:100%; min-height:0; background:#000; object-fit:contain;}
   body.demo-open{overflow:hidden;}
 </style>
 
@@ -528,8 +562,23 @@
     document.getElementById("demoModal").classList.remove("open");
     document.body.classList.remove("demo-open");
   }
+  function openVideo(evt){
+    if(evt) evt.preventDefault();
+    var video = document.getElementById("overviewVideo");
+    if(!video.src) video.src = "https://d2ol7oe51mr4n9.cloudfront.net/user_3HG9DI8rIavwXw59X7s13moRtrt/2b1d965d-de5a-42ff-a7c9-56b17b875a10.mp4";
+    document.getElementById("videoModal").classList.add("open");
+    document.body.classList.add("demo-open");
+    video.play();
+    return false;
+  }
+  function closeVideo(){
+    var video = document.getElementById("overviewVideo");
+    video.pause();
+    document.getElementById("videoModal").classList.remove("open");
+    document.body.classList.remove("demo-open");
+  }
   document.addEventListener("keydown", function(e){
-    if(e.key === "Escape") closeDemo();
+    if(e.key === "Escape"){ closeDemo(); closeVideo(); }
   });
 </script>
 
