@@ -202,6 +202,37 @@
   .trust-item h3{font-size:14.5px; font-weight:700; margin-bottom:6px;}
   .trust-item p{font-size:13px; color:var(--slate); line-height:1.55;}
 
+  /* ---------- founding schools ---------- */
+  .founding{background:var(--navy);}
+  .founding .head{max-width:660px; margin-bottom:44px;}
+  .founding .section-eyebrow{color:var(--gold);}
+  .founding h2{color:#fff;}
+  .founding-grid{display:grid; grid-template-columns:1.1fr 0.9fr; gap:40px; align-items:start;}
+  @media (max-width:760px){ .founding-grid{grid-template-columns:1fr;} }
+  .founding-benefits{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:16px;}
+  .founding-benefits li{
+    display:flex; align-items:flex-start; gap:12px; font-size:15px; color:#EAF3EF; line-height:1.55;
+  }
+  .founding-benefits li::before{
+    content:"✓"; flex-shrink:0; width:22px; height:22px; border-radius:50%;
+    background:rgba(227,166,47,0.18); border:1px solid rgba(227,166,47,0.45); color:var(--gold);
+    display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; margin-top:1px;
+  }
+  .founding-benefits li strong{color:#fff;}
+  .founding-counter-card{
+    background:var(--navy-deep); border:1px solid rgba(227,166,47,0.35); border-radius:16px;
+    padding:28px; text-align:center;
+  }
+  .founding-counter-label{font-size:11px; text-transform:uppercase; letter-spacing:0.08em; color:#8FA79C; font-weight:700; margin-bottom:10px;}
+  .founding-counter-number{font-family:'JetBrains Mono',monospace; font-size:40px; font-weight:700; color:var(--gold); margin-bottom:16px;}
+  .founding-counter-number span{color:var(--gold);}
+  .founding-progress{background:rgba(255,255,255,0.1); border-radius:999px; height:8px; overflow:hidden;}
+  .founding-progress-fill{
+    background:var(--gold); height:100%; width:100%; border-radius:999px;
+    transform:scaleX(0); transform-origin:left; transition:transform .6s ease;
+  }
+  .founding-counter-note{margin-top:14px; font-size:12.5px; color:#8FA79C; line-height:1.6;}
+
   /* ---------- pricing teaser ---------- */
   .pricing{background:var(--chalk);}
   .pricing .head{text-align:center; max-width:600px; margin:0 auto 44px;}
@@ -463,6 +494,32 @@
   </div>
 </section>
 
+<section class="founding" id="founding">
+  <div class="wrap">
+    <div class="head">
+      <span class="section-eyebrow">Founding Schools Programme</span>
+      <h2>The first 100 schools, treated like partners — not customers.</h2>
+      <p style="color:#C7D6CD; font-size:16.5px; line-height:1.7;">Totem is still early, and that's the advantage: founding schools don't just get a discount, they get a seat at the table while the product is being built.</p>
+    </div>
+    <div class="founding-grid">
+      <ul class="founding-benefits">
+        <li><strong>Founder badge</strong>, shown inside Totem permanently, so your school is visibly one of the first.</li>
+        <li><strong>No fee increases, ever:</strong> your price is locked in for life, even as standard pricing rises for everyone who joins later.</li>
+        <li><strong>Direct influence on new features</strong>, since what gets built next is shaped by conversations with founding schools first.</li>
+        <li><strong>Priority support</strong>, not the general queue.</li>
+        <li><strong>First 100 schools, ever:</strong> once they're claimed, this offer won't reopen.</li>
+      </ul>
+      <div class="founding-counter-card">
+        <div class="founding-counter-label">Founding spots claimed</div>
+        <div class="founding-counter-number"><span id="foundingCount">—</span> / 100</div>
+        <div class="founding-progress"><div class="founding-progress-fill" id="foundingProgressFill"></div></div>
+        <p class="founding-counter-note">Every school locks in their price and badge the moment they sign up.</p>
+        <a href="index.html?mode=signup&amp;ref=founding" class="btn btn-mint btn-lg" style="width:100%; margin-top:20px; justify-content:center;">Claim your founding spot</a>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section class="pricing">
   <div class="wrap">
     <div class="head">
@@ -596,6 +653,34 @@
 
 <script>
   document.getElementById("footerLogoImg").src = document.querySelector(".nav-logo-img").src;
+</script>
+
+<!-- Founding Schools live counter: calls a narrow public RPC that returns
+     only a count (never any school data) — see get_founding_schools_count()
+     in supabase/migrations. Fails silently to "—" if the fetch doesn't
+     resolve, so a network hiccup never shows a broken/wrong number. -->
+<script>
+  (function(){
+    var SUPABASE_URL = "https://tiieaubyrjcsgiaegikb.supabase.co";
+    var SUPABASE_ANON_KEY = "sb_publishable_8negZhlDSfCU9pxz-cfl6g_CD1XP0Mp";
+    fetch(SUPABASE_URL + "/rest/v1/rpc/get_founding_schools_count", {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_ANON_KEY,
+        "Authorization": "Bearer " + SUPABASE_ANON_KEY,
+        "Content-Type": "application/json"
+      }
+    })
+    .then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(count){
+      if(typeof count !== "number") return;
+      var claimed = Math.max(0, Math.min(100, count));
+      document.getElementById("foundingCount").textContent = claimed;
+      var fill = document.getElementById("foundingProgressFill");
+      if(fill) fill.style.transform = "scaleX(" + (claimed / 100) + ")";
+    })
+    .catch(function(){ /* leave the "—" placeholder in place */ });
+  })();
 </script>
 
 </body>

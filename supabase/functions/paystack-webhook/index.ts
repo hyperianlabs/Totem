@@ -158,6 +158,23 @@ Deno.serve(async (req: Request) => {
         };
         if (tier) update.plan = tier;
 
+        // Founding Schools Programme: "no fee increases, ever" — the first
+        // time a founding school successfully pays, permanently record
+        // which Paystack plan_code (i.e. price point) they paid against,
+        // so they can always be resubscribed on that same plan later even
+        // after public pricing changes and new, pricier Paystack plans get
+        // created for everyone else. Set-once — never overwritten.
+        if (planCode) {
+          const { data: org } = await supabaseAdmin
+            .from("organizations")
+            .select("is_founding_school, founder_locked_plan_code")
+            .eq("id", orgId)
+            .single();
+          if (org?.is_founding_school && !org.founder_locked_plan_code) {
+            update.founder_locked_plan_code = planCode;
+          }
+        }
+
         await supabaseAdmin.from("organizations").update(update).eq("id", orgId);
         break;
       }

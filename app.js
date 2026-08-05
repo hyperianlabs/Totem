@@ -16,6 +16,8 @@
   let currentOrgConsentConfirmed = false;
   let currentOrgConsentDate = null;
   let currentOrgEmblemUrl = null;
+  let currentOrgIsFoundingSchool = false;
+  let currentOrgFounderNumber = null;
   let isPlatformAdmin = false;
   let isDemoMode = false;
 
@@ -132,6 +134,14 @@
     } else {
       badge.style.display = "none";
     }
+    const founderBadge = document.getElementById("founderBadge");
+    if(currentOrgIsFoundingSchool && currentOrgFounderNumber){
+      founderBadge.textContent = `Founding School #${currentOrgFounderNumber}`;
+      founderBadge.title = "Locked in for life — no fee increases, ever.";
+      founderBadge.style.display = "";
+    } else {
+      founderBadge.style.display = "none";
+    }
     loadState();
   }
   function showAuth(){
@@ -141,6 +151,7 @@
     document.getElementById("appRoot").style.display = "none";
     document.getElementById("headerAccount").style.display = "none";
     document.getElementById("orgBadge").style.display = "none";
+    document.getElementById("founderBadge").style.display = "none";
     document.getElementById("btnPlatformAdmin").style.display = "none";
     document.getElementById("accountDropdown").style.display = "none";
     document.getElementById("authShell").style.display = "flex";
@@ -167,7 +178,7 @@
   async function resolveOrgAndEnter(user){
     const { data, error } = await supabaseClient
       .from("team_members")
-      .select("org_id, role, organizations(name, plan, created_at, org_type, consent_attestation_confirmed, consent_attestation_date, emblem_url)")
+      .select("org_id, role, organizations(name, plan, created_at, org_type, consent_attestation_confirmed, consent_attestation_date, emblem_url, is_founding_school, founder_number)")
       .eq("id", user.id)
       .single();
     if(error || !data || !data.org_id){
@@ -185,6 +196,8 @@
     currentOrgConsentConfirmed = data.organizations ? data.organizations.consent_attestation_confirmed : false;
     currentOrgConsentDate = data.organizations ? data.organizations.consent_attestation_date : null;
     currentOrgEmblemUrl = data.organizations ? data.organizations.emblem_url : null;
+    currentOrgIsFoundingSchool = data.organizations ? !!data.organizations.is_founding_school : false;
+    currentOrgFounderNumber = data.organizations ? data.organizations.founder_number : null;
     document.getElementById("btnInviteStaff").style.display = currentUserRole === "owner" ? "" : "none";
     document.getElementById("btnRenameClub").style.display = currentUserRole === "owner" ? "" : "none";
     checkPlatformAdmin();
@@ -551,7 +564,7 @@
     listEl.innerHTML = `<div style="font-size:12px; color:var(--slate);">Loading…</div>`;
     const { data, error } = await supabaseClient
       .from("organizations")
-      .select("id, name, org_type, plan, created_at, duplicate_justification, flagged_for_removal, inactivity_warning_sent_at, signup_source, org_state(updated_at)")
+      .select("id, name, org_type, plan, created_at, duplicate_justification, flagged_for_removal, inactivity_warning_sent_at, signup_source, is_founding_school, founder_number, org_state(updated_at)")
       .order("flagged_for_removal", { ascending: false })
       .order("created_at", { ascending: false });
     if(error){
@@ -563,6 +576,7 @@
       const lastActive = org.org_state ? org.org_state.updated_at : null;
       const activeLabel = lastActive ? `last active ${new Date(lastActive).toLocaleDateString()}` : "no activity recorded";
       const sourceLabel = org.signup_source ? ` · via ${escapeHtml(org.signup_source)}` : "";
+      const founderLabel = org.is_founding_school ? ` · <span style="color:var(--gold-deep); font-weight:700;">Founder #${org.founder_number}</span>` : "";
       const flagNote = org.duplicate_justification ? `<div style="font-size:10px; color:var(--gold-deep); margin-top:2px;">Flagged at signup: "${escapeHtml(org.duplicate_justification)}"</div>` : "";
       let inactivityNote = "";
       if(org.flagged_for_removal){
@@ -573,7 +587,7 @@
       return `
         <div class="staff-row" style="align-items:flex-start; flex-direction:column; gap:8px; ${org.flagged_for_removal ? "border-color:var(--clay); background:#FBE9E4;" : ""}">
           <div style="display:flex; justify-content:space-between; width:100%; align-items:center;">
-            <span><span class="staff-email">${escapeHtml(org.name)}</span><span class="staff-role">${escapeHtml(org.org_type)} · ${escapeHtml(org.plan)} · created ${escapeHtml(dateLabel)} · ${escapeHtml(activeLabel)}${sourceLabel}</span></span>
+            <span><span class="staff-email">${escapeHtml(org.name)}</span><span class="staff-role">${escapeHtml(org.org_type)} · ${escapeHtml(org.plan)} · created ${escapeHtml(dateLabel)} · ${escapeHtml(activeLabel)}${sourceLabel}${founderLabel}</span></span>
           </div>
           ${flagNote}
           ${inactivityNote}
@@ -877,17 +891,20 @@
     const box = document.getElementById("subscriptionStatusBox");
     const tier = currentRequiredTier();
     const vatNote = "excl. VAT";
+    const founderNote = currentOrgIsFoundingSchool
+      ? `<br><span style="color:var(--gold-deep); font-weight:700;">Founding School #${currentOrgFounderNumber}</span> — your price is locked in for life, no fee increases ever, even if standard pricing rises later.`
+      : "";
     if(isFreePlan()){
       const daysLeft = Math.max(0, Math.round(FREE_PLAN_MAX_DAYS - daysSinceOrgCreated()));
       box.className = "consent-status-box unconfirmed";
-      box.innerHTML = `Free trial${daysLeft > 0 ? ` — ${daysLeft} day${daysLeft === 1 ? "" : "s"} remaining` : " — trial period has ended"}.<br>Based on your current sports &amp; coaches, you'd be on the <strong>${escapeHtml(tier.label)}</strong> plan — R${tier.priceZAR}/month (${vatNote}) once you upgrade.`;
+      box.innerHTML = `Free trial${daysLeft > 0 ? ` — ${daysLeft} day${daysLeft === 1 ? "" : "s"} remaining` : " — trial period has ended"}.<br>Based on your current sports &amp; coaches, you'd be on the <strong>${escapeHtml(tier.label)}</strong> plan — R${tier.priceZAR}/month (${vatNote}) once you upgrade.${founderNote}`;
     } else {
       const planIdx = tierIndexById(currentOrgPlan);
       const planTier = planIdx >= 0 ? SUBSCRIPTION_TIERS[planIdx] : null;
       box.className = "consent-status-box confirmed";
-      box.innerHTML = planTier
+      box.innerHTML = (planTier
         ? `You're on the <strong>${escapeHtml(planTier.label)}</strong> plan — R${planTier.priceZAR}/month (${vatNote}).`
-        : `Paid plan active.`;
+        : `Paid plan active.`) + founderNote;
     }
   }
 

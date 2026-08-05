@@ -61,6 +61,11 @@
     font-family:'Inter',sans-serif; font-size:11px; font-weight:700; letter-spacing:0.03em;
     padding:4px 11px; border-radius:999px; align-self:center; margin-left:2px;
   }
+  .founder-badge{
+    background:rgba(227,166,47,0.15); color:var(--gold); border:1px solid rgba(227,166,47,0.4);
+    font-family:'Inter',sans-serif; font-size:11px; font-weight:700; letter-spacing:0.03em;
+    padding:4px 11px; border-radius:999px; align-self:center; margin-left:6px; cursor:default;
+  }
 
   nav.sports{
     display:flex; gap:8px; margin-top:18px; flex-wrap:wrap; position:relative; z-index:1;
