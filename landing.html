@@ -649,6 +649,10 @@
   document.addEventListener("keydown", function(e){
     if(e.key === "Escape"){ closeDemo(); closeVideo(); }
   });
+  // Lets outbound links (e.g. outreach emails) deep-link straight to the
+  // video instead of pointing at the raw .mp4, which some mail clients
+  // (Gmail included) flag with a redirect-warning interstitial.
+  if(location.hash === "#watch") openVideo();
 </script>
 
 <script>
