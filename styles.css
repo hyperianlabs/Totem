@@ -647,6 +647,12 @@
     .mobile-nav-bar{display:block; position:sticky; top:0; z-index:40;}
     .calendar-title{min-width:0;}
     .field input, .field select, .field textarea{width:100% !important; min-width:0 !important;}
+
+    /* iOS Safari auto-zooms the page on focus of any input/select/textarea
+       under 16px, and doesn't zoom back out afterward — that's the "I have
+       to resize it to fit the screen" every launch. Forcing 16px minimum
+       on every form control (not just .field ones) kills the auto-zoom. */
+    input, select, textarea{font-size:16px !important;}
     .modal{padding:18px;}
     .side-head{gap:6px;}
     .bench-size-control{flex-wrap:wrap;}
