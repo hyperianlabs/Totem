@@ -854,11 +854,11 @@
   // supabase/functions/paystack-webhook/index.ts exactly (that function
   // maps the same codes back to tier ids once payment succeeds).
   const PAYSTACK_PLAN_CODES = {
-    tier1: "PLN_62t31ifd00ppww1",
-    tier2: "PLN_7ccas4gzjd8okmu",
-    tier3: "PLN_cazjw6w97mv7125",
-    tier4: "PLN_q883p3s2fuegu4a",
-    tier5: "PLN_nke2jp6w1zbk3zu",
+    tier1: "PLN_4m2505mn8yvzenx",
+    tier2: "PLN_e9b74ydkqictjin",
+    tier3: "PLN_2yudl4wlpkjpg8h",
+    tier4: "PLN_ubisnz1yicqvibk",
+    tier5: "PLN_ih9elf926fg79jw",
   };
 
   // Opens a real Paystack checkout for the given tier. Payment success

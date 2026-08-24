@@ -59,11 +59,11 @@ const supabaseAdmin = createClient(
 // Map your actual Paystack plan_code(s) to Totem's internal plan name here —
 // filled in from your live Paystack Plans (verified distinct, no duplicates).
 const PLAN_CODE_TO_TIER: Record<string, string> = {
-  "PLN_62t31ifd00ppww1": "tier1", // Starter, R49  — 1 sport, 4 coaches
-  "PLN_7ccas4gzjd8okmu": "tier2", // Growth, R99  — 2 sports, 6 coaches
-  "PLN_cazjw6w97mv7125": "tier3", // Club, R149 — 3 sports, 8 coaches
-  "PLN_q883p3s2fuegu4a": "tier4", // Multi-Sport, R199 — 4 sports, 10 coaches
-  "PLN_nke2jp6w1zbk3zu": "tier5", // Unlimited, R349
+  "PLN_4m2505mn8yvzenx": "tier1", // Totem Starter, R49  — 1 sport, 4 coaches
+  "PLN_e9b74ydkqictjin": "tier2", // Totem Growth, R99  — 2 sports, 6 coaches
+  "PLN_2yudl4wlpkjpg8h": "tier3", // Totem Club, R149 — 3 sports, 8 coaches
+  "PLN_ubisnz1yicqvibk": "tier4", // Totem Multi-Sport, R199 — 4 sports, 10 coaches
+  "PLN_ih9elf926fg79jw": "tier5", // Totem Unlimited, R349
 };
 
 async function verifySignature(bodyBuffer: ArrayBuffer, signature: string | null): Promise<boolean> {
