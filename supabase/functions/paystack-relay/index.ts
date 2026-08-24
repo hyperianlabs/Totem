@@ -61,10 +61,18 @@ Deno.serve(async (req: Request) => {
     }
   });
 
-  if (failures === TARGETS.length) {
-    // Every downstream target failed — tell Paystack so it retries the
-    // whole delivery later, since nothing actually processed this event.
-    return new Response("All relay targets failed", { status: 502 });
+  if (failures > 0) {
+    // ANY target failing — not just all of them — has to fail the whole
+    // response, so Paystack's own retry mechanism kicks in. This keeps
+    // each app's original reliability guarantee: before this relay
+    // existed, Paystack retried directly against a failing endpoint;
+    // silently returning 200 here because the OTHER app happened to
+    // succeed would let that guarantee quietly break for whichever one
+    // failed. A retry means the succeeding app may occasionally receive
+    // the same event twice, but updating an org's plan/status from the
+    // same event twice is harmless — same computed tier, same org_id,
+    // same result either time.
+    return new Response(`${failures}/${TARGETS.length} relay targets failed`, { status: 502 });
   }
 
   return new Response("ok", { status: 200 });
