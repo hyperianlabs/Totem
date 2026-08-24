@@ -99,7 +99,9 @@
     return false;
   }
   function showUpgradePrompt(message){
-    alert(`${message}\n\nUpgrading isn't wired up to real payments yet — this is a placeholder. Contact the Totem team to upgrade for now.`);
+    const tier = currentRequiredTier();
+    const ok = confirm(`${message}\n\nContinue to checkout for the ${tier.label} plan — R${tier.priceZAR}/month (excl. VAT)?`);
+    if(ok) startPaystackCheckout(tier.id);
   }
   function renderUsageBanner(){
     const el = document.getElementById("usageBanner");
@@ -847,6 +849,51 @@
     { id:"tier4", label:"Multi-Sport",maxSports:4,        maxCoaches:10,        priceZAR:199 },
     { id:"tier5", label:"Unlimited",  maxSports:Infinity, maxCoaches:Infinity,  priceZAR:349 }
   ];
+
+  // Real Paystack plan codes — must match PLAN_CODE_TO_TIER in
+  // supabase/functions/paystack-webhook/index.ts exactly (that function
+  // maps the same codes back to tier ids once payment succeeds).
+  const PAYSTACK_PLAN_CODES = {
+    tier1: "PLN_62t31ifd00ppww1",
+    tier2: "PLN_7ccas4gzjd8okmu",
+    tier3: "PLN_cazjw6w97mv7125",
+    tier4: "PLN_q883p3s2fuegu4a",
+    tier5: "PLN_nke2jp6w1zbk3zu",
+  };
+
+  // Opens a real Paystack checkout for the given tier. Payment success
+  // itself doesn't update the org's plan here — that only happens once
+  // the paystack-webhook function receives and verifies the resulting
+  // charge.success/subscription.create event, same as the setup this
+  // integration has always been built around. This just starts that flow
+  // and gives the person a clear "we're waiting on confirmation" message.
+  function startPaystackCheckout(tierId){
+    const tier = SUBSCRIPTION_TIERS[tierIndexById(tierId)];
+    const planCode = PAYSTACK_PLAN_CODES[tierId];
+    if(!tier || !planCode){
+      alert("Something went wrong finding that plan. Please contact support.");
+      return;
+    }
+    if(typeof PaystackPop === "undefined"){
+      alert("Payments couldn't load — check your connection and try again.");
+      return;
+    }
+    const handler = PaystackPop.setup({
+      key: window.TOTEM_CONFIG.PAYSTACK_PUBLIC_KEY,
+      email: currentUser.email,
+      plan: planCode,
+      currency: "ZAR",
+      metadata: { org_id: currentOrgId, org_name: currentOrgName, tier: tierId },
+      callback: function(response){
+        alert(`Payment received (ref ${response.reference}). It can take a minute to reflect here — reload the page shortly to see your updated plan.`);
+      },
+      onClose: function(){
+        // User closed the popup without paying — nothing to do, they can
+        // just try again from the same upgrade button.
+      }
+    });
+    handler.openIframe();
+  }
   function uniqueCoachCount(){
     const emails = new Set(state.coaches.map(c => (c.email || "").toLowerCase().trim()).filter(Boolean));
     return emails.size;
@@ -871,7 +918,8 @@
     const currentTier = SUBSCRIPTION_TIERS[currentTierIdx];
     if(newSportsCount <= currentTier.maxSports && newCoachCount <= currentTier.maxCoaches) return true;
     const needed = tierForUsage(newSportsCount, newCoachCount);
-    alert(`This needs the ${needed.label} plan (R${needed.priceZAR}/month) — you're currently on ${currentTier.label} (R${currentTier.priceZAR}/month). Upgrade from Club Settings to continue.`);
+    const ok = confirm(`This needs the ${needed.label} plan (R${needed.priceZAR}/month, excl. VAT) — you're currently on ${currentTier.label} (R${currentTier.priceZAR}/month).\n\nContinue to checkout now?`);
+    if(ok) startPaystackCheckout(needed.id);
     return false;
   }
 
@@ -897,7 +945,9 @@
     if(isFreePlan()){
       const daysLeft = Math.max(0, Math.round(FREE_PLAN_MAX_DAYS - daysSinceOrgCreated()));
       box.className = "consent-status-box unconfirmed";
-      box.innerHTML = `Free trial${daysLeft > 0 ? ` — ${daysLeft} day${daysLeft === 1 ? "" : "s"} remaining` : " — trial period has ended"}.<br>Based on your current sports &amp; coaches, you'd be on the <strong>${escapeHtml(tier.label)}</strong> plan — R${tier.priceZAR}/month (${vatNote}) once you upgrade.${founderNote}`;
+      box.innerHTML = `Free trial${daysLeft > 0 ? ` — ${daysLeft} day${daysLeft === 1 ? "" : "s"} remaining` : " — trial period has ended"}.<br>Based on your current sports &amp; coaches, you'd be on the <strong>${escapeHtml(tier.label)}</strong> plan — R${tier.priceZAR}/month (${vatNote}) once you upgrade.${founderNote}<br><button type="button" id="subscriptionUpgradeNow" style="margin-top:10px;">Upgrade now</button>`;
+      const upgradeBtn = document.getElementById("subscriptionUpgradeNow");
+      if(upgradeBtn) upgradeBtn.addEventListener("click", () => startPaystackCheckout(tier.id));
     } else {
       const planIdx = tierIndexById(currentOrgPlan);
       const planTier = planIdx >= 0 ? SUBSCRIPTION_TIERS[planIdx] : null;

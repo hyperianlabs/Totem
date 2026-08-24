@@ -1,1 +1,6 @@
 supabase/.temp/
+email-templates/
+.DS_Store
+.impeccable/
+social/
+overview-video-*.mp4
