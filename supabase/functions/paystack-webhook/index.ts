@@ -139,23 +139,43 @@ Deno.serve(async (req: Request) => {
       // (and for one-off charges, which this integration doesn't use).
       case "charge.success":
       case "subscription.create": {
-        const orgId = data.metadata?.org_id || data.customer?.metadata?.org_id;
+        let orgId = data.metadata?.org_id || data.customer?.metadata?.org_id;
+        const customerCode = data.customer?.customer_code || null;
+        const subscriptionCode = data.subscription_code || data.subscription?.subscription_code || null;
+
+        // subscription.create doesn't carry the metadata we attach at
+        // checkout — that's on the transaction/charge object, not the
+        // customer or subscription object — so it arrives with no way to
+        // find the org on its own. Fall back to matching by customer code,
+        // which the sibling charge.success event (fired moments earlier for
+        // the same purchase) already recorded on the org.
+        if (!orgId && customerCode) {
+          const { data: orgByCustomer } = await supabaseAdmin
+            .from("organizations")
+            .select("id")
+            .eq("payment_customer_id", customerCode)
+            .maybeSingle();
+          orgId = orgByCustomer?.id || null;
+        }
+
         const planCode = data.plan?.plan_code || data.plan_object?.plan_code || data.plan;
         const tier = planCode && PLAN_CODE_TO_TIER[planCode] ? PLAN_CODE_TO_TIER[planCode] : null;
 
         if (!orgId) {
-          console.warn(`${eventType} with no org_id in metadata — can't link to an org.`);
+          console.warn(`${eventType} with no org_id in metadata and no matching org by customer code — can't link to an org.`);
           break;
         }
         if (!tier) {
           console.warn(`Plan code ${planCode} isn't mapped in PLAN_CODE_TO_TIER — plan tier not updated for this event.`);
         }
 
-        const update: Record<string, unknown> = {
-          payment_customer_id: data.customer?.customer_code || null,
-          payment_subscription_id: data.subscription_code || data.subscription?.subscription_code || null,
-          plan_status: "active",
-        };
+        // Only write fields this specific event actually gave us — charge.success
+        // and subscription.create carry different subsets, and blanking out a
+        // value one already set (e.g. subscription_id) with a null from the
+        // other would silently undo it.
+        const update: Record<string, unknown> = { plan_status: "active" };
+        if (customerCode) update.payment_customer_id = customerCode;
+        if (subscriptionCode) update.payment_subscription_id = subscriptionCode;
         if (tier) update.plan = tier;
 
         // Founding Schools Programme: "no fee increases, ever" — the first
