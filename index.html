@@ -21,7 +21,7 @@
 <body>
 
 <div class="auth-shell" id="authShell">
-  <div class="auth-card">
+  <div class="auth-card" id="loginSignupCard">
     <img class="auth-logo" src="totem-logo.png" alt="Totem — Build your team, block by block">
     <p class="auth-tagline" id="authTagline">Sign in to your club account</p>
 
@@ -76,8 +76,24 @@
       <label>Password</label>
       <input type="password" id="authPassword" autocomplete="current-password">
     </div>
+    <p class="auth-hint" id="forgotPasswordHint" style="margin:-4px 0 12px; text-align:right;"><a href="#" id="forgotPasswordLink">Forgot password?</a></p>
     <button class="btn btn-primary" id="btnLogin" style="width:100%;">Log in</button>
     <p class="auth-hint" id="authHint">Don't have an account? Use the Sign up tab above.</p>
+  </div>
+
+  <div class="auth-card" id="resetPasswordCard" style="display:none;">
+    <img class="auth-logo" src="totem-logo.png" alt="Totem — Build your team, block by block">
+    <p class="auth-tagline">Set a new password</p>
+    <div id="resetPasswordError" class="auth-error" style="display:none;"></div>
+    <div class="field">
+      <label>New password</label>
+      <input type="password" id="newPassword" autocomplete="new-password">
+    </div>
+    <div class="field">
+      <label>Confirm new password</label>
+      <input type="password" id="newPasswordConfirm" autocomplete="new-password">
+    </div>
+    <button class="btn btn-primary" id="btnSetNewPassword" style="width:100%;">Set new password</button>
   </div>
 </div>
 

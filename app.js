@@ -227,6 +227,7 @@
     document.getElementById("authHint").textContent = isSignup
       ? "Already have an account? Use the Log in tab above."
       : "Don't have an account? Use the Sign up tab above.";
+    document.getElementById("forgotPasswordHint").style.display = isSignup ? "none" : "";
     document.getElementById("authError").style.display = "none";
     document.getElementById("authInfo").style.display = "none";
   }
@@ -334,6 +335,43 @@
     } else {
       authInfoMsg(`Confirmation email resent to ${email}. Check your inbox (and spam folder).`);
     }
+  });
+
+  document.getElementById("forgotPasswordLink").addEventListener("click", async (e) => {
+    e.preventDefault();
+    const email = document.getElementById("authEmail").value.trim();
+    if(!email){ authError("Enter your email above first, then click \"Forgot password?\"."); return; }
+    const redirectTo = window.location.href.split("#")[0].split("?")[0];
+    const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo });
+    if(error){ authError(error.message); return; }
+    authInfoMsg(`If ${email} has a Totem account, a password reset link has been sent — check your inbox (and spam folder).`);
+  });
+
+  // Supabase's password-recovery link lands back on this same page with a
+  // recovery token in the URL, which the client SDK auto-detects on load and
+  // fires as this event (independent of persistSession — that only controls
+  // whether a session is saved to storage, not whether the initial URL parse
+  // happens). Swap in the "set new password" card in place of login/signup.
+  supabaseClient.auth.onAuthStateChange((event) => {
+    if(event === "PASSWORD_RECOVERY"){
+      document.getElementById("authShell").style.display = "flex";
+      document.getElementById("appRoot").style.display = "none";
+      document.getElementById("loginSignupCard").style.display = "none";
+      document.getElementById("resetPasswordCard").style.display = "";
+    }
+  });
+  document.getElementById("btnSetNewPassword").addEventListener("click", async () => {
+    const pw = document.getElementById("newPassword").value;
+    const pwConfirm = document.getElementById("newPasswordConfirm").value;
+    const errEl = document.getElementById("resetPasswordError");
+    errEl.style.display = "none";
+    if(pw.length < 8){ errEl.textContent = "Password must be at least 8 characters."; errEl.style.display = "block"; return; }
+    if(pw !== pwConfirm){ errEl.textContent = "Passwords don't match."; errEl.style.display = "block"; return; }
+    const { data, error } = await supabaseClient.auth.updateUser({ password: pw });
+    if(error){ errEl.textContent = error.message; errEl.style.display = "block"; return; }
+    document.getElementById("resetPasswordCard").style.display = "none";
+    document.getElementById("loginSignupCard").style.display = "";
+    await resolveOrgAndEnter(data.user);
   });
 
   document.getElementById("btnAccountMenu").addEventListener("click", (e) => {

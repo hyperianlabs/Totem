@@ -31,7 +31,6 @@ import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
 
 const hookSecretRaw = Deno.env.get("SEND_EMAIL_HOOK_SECRET") || "";
 const hookSecret = hookSecretRaw.replace("v1,whsec_", "");
-const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 const resendApiKey = Deno.env.get("RESEND_API_KEY") || "";
 const fromAddress = Deno.env.get("RESEND_FROM_ADDRESS") || "Totem <onboarding@resend.dev>";
 
@@ -51,7 +50,13 @@ function buildVerifyUrl(emailData: EmailData, tokenHash: string, actionType: str
     type: actionType,
     redirect_to: emailData.redirect_to || emailData.site_url,
   });
-  return `${supabaseUrl}/auth/v1/verify?${params.toString()}`;
+  // Routed through totem.hyperianlabs.com/verify (a Vercel rewrite to the
+  // real Supabase /auth/v1/verify endpoint — see vercel.json) instead of
+  // linking directly to the raw *.supabase.co project domain. Mail filters
+  // (Microsoft's especially) treat links to unbranded shared-hosting
+  // subdomains as higher risk, which was landing these emails in Junk even
+  // with SPF/DKIM/DMARC all passing.
+  return `https://totem.hyperianlabs.com/verify?${params.toString()}`;
 }
 
 function buildEmailContent(actionType: string, verifyUrl: string, userEmail: string): { subject: string; html: string } {

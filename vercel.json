@@ -1,0 +1,5 @@
+{
+  "rewrites": [
+    { "source": "/verify", "destination": "https://tiieaubyrjcsgiaegikb.supabase.co/auth/v1/verify" }
+  ]
+}
