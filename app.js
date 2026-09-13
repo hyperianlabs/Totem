@@ -43,6 +43,18 @@
   // about starting a trial.
   const wantsSignupOnLoad = new URLSearchParams(window.location.search).get("mode") === "signup";
 
+  // Password-reset links point here (see auth-send-email's buildVerifyUrl)
+  // with the recovery token in the query string, instead of straight to
+  // Supabase's /verify GET endpoint. /verify consumes the one-time token
+  // the instant it's *requested* — and mail security scanners (Gmail,
+  // Outlook Safe Links, corporate gateways) prefetch every link in an
+  // incoming email before the user ever opens it, silently burning the
+  // token so the real click always shows "expired". Landing here first and
+  // only calling verifyOtp() on an explicit button click means the token is
+  // consumed by the user's click, not by an automated prefetch.
+  const resetUrlParams = new URLSearchParams(window.location.search);
+  const pendingRecoveryTokenHash = resetUrlParams.get("type") === "recovery" ? resetUrlParams.get("token_hash") : null;
+
   // Free-plan limits. Sports is the real, intentional business lever —
   // players is left generous (not a serious constraint) purely as an
   // anti-abuse ceiling, since schools can genuinely have hundreds of
@@ -347,11 +359,26 @@
     authInfoMsg(`If ${email} has a Totem account, a password reset link has been sent — check your inbox (and spam folder).`);
   });
 
-  // Supabase's password-recovery link lands back on this same page with a
-  // recovery token in the URL, which the client SDK auto-detects on load and
-  // fires as this event (independent of persistSession — that only controls
-  // whether a session is saved to storage, not whether the initial URL parse
-  // happens). Swap in the "set new password" card in place of login/signup.
+  document.getElementById("btnConfirmReset").addEventListener("click", async () => {
+    const btn = document.getElementById("btnConfirmReset");
+    btn.disabled = true;
+    btn.textContent = "Verifying…";
+    const { error } = await supabaseClient.auth.verifyOtp({ token_hash: pendingRecoveryTokenHash, type: "recovery" });
+    btn.disabled = false;
+    btn.textContent = "Continue";
+    if(error){
+      document.getElementById("confirmResetCard").style.display = "none";
+      document.getElementById("loginSignupCard").style.display = "";
+      authError("That reset link has expired or was already used — click \"Forgot password?\" below to request a new one.");
+      return;
+    }
+    // success falls through to the PASSWORD_RECOVERY handler below, which swaps in resetPasswordCard.
+  });
+
+  // verifyOtp() (triggered by btnConfirmReset above) fires this event on
+  // success (independent of persistSession — that only controls whether a
+  // session is saved to storage, not whether the event fires). Swap in the
+  // "set new password" card in place of login/signup.
   supabaseClient.auth.onAuthStateChange((event) => {
     if(event === "PASSWORD_RECOVERY"){
       document.getElementById("authShell").style.display = "flex";
@@ -755,6 +782,10 @@
     // synchronously here, before the rest of the script has finished
     // running, would hit those consts before they exist.
     setTimeout(enterDemoMode, 0);
+  } else if(pendingRecoveryTokenHash){
+    document.getElementById("authShell").style.display = "flex";
+    document.getElementById("loginSignupCard").style.display = "none";
+    document.getElementById("confirmResetCard").style.display = "";
   } else {
     supabaseClient.auth.getSession().then(({ data }) => {
       if(data.session && data.session.user) resolveOrgAndEnter(data.session.user);
