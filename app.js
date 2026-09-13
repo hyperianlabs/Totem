@@ -43,17 +43,19 @@
   // about starting a trial.
   const wantsSignupOnLoad = new URLSearchParams(window.location.search).get("mode") === "signup";
 
-  // Password-reset links point here (see auth-send-email's buildVerifyUrl)
-  // with the recovery token in the query string, instead of straight to
-  // Supabase's /verify GET endpoint. /verify consumes the one-time token
-  // the instant it's *requested* — and mail security scanners (Gmail,
-  // Outlook Safe Links, corporate gateways) prefetch every link in an
-  // incoming email before the user ever opens it, silently burning the
-  // token so the real click always shows "expired". Landing here first and
-  // only calling verifyOtp() on an explicit button click means the token is
-  // consumed by the user's click, not by an automated prefetch.
-  const resetUrlParams = new URLSearchParams(window.location.search);
-  const pendingRecoveryTokenHash = resetUrlParams.get("type") === "recovery" ? resetUrlParams.get("token_hash") : null;
+  // Password-reset and signup-confirmation links point here (see
+  // auth-send-email's buildVerifyUrl) with the token in the query string,
+  // instead of straight to Supabase's /verify GET endpoint. /verify consumes
+  // the one-time token the instant it's *requested* — and mail security
+  // scanners (Gmail, Outlook Safe Links, corporate gateways) prefetch every
+  // link in an incoming email before the user ever opens it, silently
+  // burning the token so the real click always shows "expired". Landing here
+  // first and only calling verifyOtp() on an explicit button click means the
+  // token is consumed by the user's click, not by an automated prefetch.
+  const verifyUrlParams = new URLSearchParams(window.location.search);
+  const pendingVerifyType = verifyUrlParams.get("type");
+  const pendingVerifyTokenHash = (pendingVerifyType === "recovery" || pendingVerifyType === "signup")
+    ? verifyUrlParams.get("token_hash") : null;
 
   // Free-plan limits. Sports is the real, intentional business lever —
   // players is left generous (not a serious constraint) purely as an
@@ -363,16 +365,25 @@
     const btn = document.getElementById("btnConfirmReset");
     btn.disabled = true;
     btn.textContent = "Verifying…";
-    const { error } = await supabaseClient.auth.verifyOtp({ token_hash: pendingRecoveryTokenHash, type: "recovery" });
+    const { data, error } = await supabaseClient.auth.verifyOtp({ token_hash: pendingVerifyTokenHash, type: pendingVerifyType });
     btn.disabled = false;
     btn.textContent = "Continue";
     if(error){
       document.getElementById("confirmResetCard").style.display = "none";
       document.getElementById("loginSignupCard").style.display = "";
-      authError("That reset link has expired or was already used — click \"Forgot password?\" below to request a new one.");
+      if(pendingVerifyType === "signup"){
+        authError("That confirmation link has expired or was already used — try logging in with your email and password below; if it's still unconfirmed we'll show you an option to resend it.");
+      } else {
+        authError("That reset link has expired or was already used — click \"Forgot password?\" below to request a new one.");
+      }
       return;
     }
-    // success falls through to the PASSWORD_RECOVERY handler below, which swaps in resetPasswordCard.
+    if(pendingVerifyType === "signup"){
+      document.getElementById("confirmResetCard").style.display = "none";
+      if(data.user) await resolveOrgAndEnter(data.user);
+      return;
+    }
+    // recovery success falls through to the PASSWORD_RECOVERY handler below, which swaps in resetPasswordCard.
   });
 
   // verifyOtp() (triggered by btnConfirmReset above) fires this event on
@@ -783,7 +794,11 @@
     // synchronously here, before the rest of the script has finished
     // running, would hit those consts before they exist.
     setTimeout(enterDemoMode, 0);
-  } else if(pendingRecoveryTokenHash){
+  } else if(pendingVerifyTokenHash){
+    if(pendingVerifyType === "signup"){
+      document.getElementById("confirmResetTagline").textContent = "Confirm your email";
+      document.getElementById("confirmResetMessage").textContent = "Click below to confirm your email and finish setting up your account.";
+    }
     document.getElementById("authShell").style.display = "flex";
     document.getElementById("loginSignupCard").style.display = "none";
     document.getElementById("confirmResetCard").style.display = "";

@@ -45,15 +45,17 @@ interface EmailData {
 }
 
 function buildVerifyUrl(emailData: EmailData, tokenHash: string, actionType: string): string {
-  if (actionType === "recovery") {
-    // Password-reset links point at our own page with the token in the
-    // query string, NOT at /verify. /verify is a GET that consumes the
-    // one-time token the instant it's requested, and mail security
-    // scanners (Gmail, Outlook Safe Links, corporate gateways) prefetch
-    // every link in an incoming email before the user opens it — silently
-    // burning the token so the real click always shows "expired". app.js
-    // holds the token until the user clicks a "Continue" button, then
-    // calls verifyOtp() itself, so only a real click consumes it.
+  if (actionType === "recovery" || actionType === "signup") {
+    // Password-reset and signup-confirmation links point at our own page
+    // with the token in the query string, NOT at /verify. /verify is a GET
+    // that consumes the one-time token the instant it's requested, and mail
+    // security scanners (Gmail, Outlook Safe Links, corporate gateways)
+    // prefetch every link in an incoming email before the user opens it —
+    // silently burning the token so the real click always shows "expired".
+    // app.js holds the token until the user clicks a "Continue" button,
+    // then calls verifyOtp() itself, so only a real click consumes it.
+    // (magiclink/email_change/invite aren't used by this app's UI, so they
+    // still go through /verify below — no reachable code path to fix.)
     const params = new URLSearchParams({ token_hash: tokenHash, type: actionType });
     return `https://totem.hyperianlabs.com/?${params.toString()}`;
   }
