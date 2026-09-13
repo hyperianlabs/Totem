@@ -384,6 +384,7 @@
       document.getElementById("authShell").style.display = "flex";
       document.getElementById("appRoot").style.display = "none";
       document.getElementById("loginSignupCard").style.display = "none";
+      document.getElementById("confirmResetCard").style.display = "none";
       document.getElementById("resetPasswordCard").style.display = "";
     }
   });
