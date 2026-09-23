@@ -1,7 +1,11 @@
 {
+  "id": "/",
   "name": "Totem — Team Selection",
   "short_name": "Totem",
   "description": "Build your team, block by block. Multi-sport team selection and management for schools and clubs.",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["sports", "productivity", "education"],
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

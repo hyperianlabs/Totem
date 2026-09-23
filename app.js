@@ -436,6 +436,47 @@
     await supabaseClient.auth.signOut();
     showAuth();
   });
+  // In-app account deletion — available to every logged-in user (required by
+  // both app stores). Distinct from "delete the club".
+  document.getElementById("btnDeleteAccount").addEventListener("click", async () => {
+    if(isDemoMode){ showToast("Account deletion isn't available in the demo."); return; }
+    const isOwner = currentUserRole === "owner";
+    let warning = "Permanently delete your Totem account?\n\nThis removes your login and personal data and cannot be undone.";
+    if(isOwner){
+      warning += `\n\nIf you're the only member of "${currentOrgName || "your club"}", the whole club and all its data (players, fixtures, results) is deleted too. If other staff are still on the club, you'll be asked to remove them or delete the club first.`;
+    } else {
+      warning += `\n\nYou'll lose access to "${currentOrgName || "your club"}". The club and its data stay with the remaining staff.`;
+    }
+    if(!confirm(warning + "\n\nContinue?")) return;
+    if(prompt('Type "DELETE" to confirm permanently deleting your account:') !== "DELETE"){
+      alert("That didn't match — nothing was deleted.");
+      return;
+    }
+
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    try{
+      const { data, error } = await supabaseClient.functions.invoke("delete-my-account", {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+      if(error){
+        // Non-2xx (e.g. the owner-has-other-staff block) — read the body message.
+        let msg = "Could not delete your account. Please try again.";
+        if(error.context && typeof error.context.json === "function"){
+          try{ const body = await error.context.json(); if(body && body.message) msg = body.message; }catch(_){}
+        }
+        alert(msg);
+        return;
+      }
+      if(data && data.error){ alert(data.message || "Could not delete your account."); return; }
+    }catch(e){
+      alert("Could not delete your account. Please try again.");
+      return;
+    }
+
+    alert("Your account has been permanently deleted.");
+    await supabaseClient.auth.signOut();
+    showAuth();
+  });
   document.getElementById("btnInviteStaff").addEventListener("click", async () => {
     const { data, error } = await supabaseClient
       .from("organizations")
