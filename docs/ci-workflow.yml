@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Blocking: browser-JS syntax, JSON validity, and no-secrets-in-client.
+      # Zero dependencies — no install step needed.
+      - name: Static checks
+        run: node scripts/check.mjs
+
+      # Informational for now: type-check the Deno edge functions. Left
+      # non-blocking on first setup since it can't be pre-validated locally
+      # (no Deno here); flip continue-on-error to false once it's confirmed
+      # green in Actions.
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Type-check edge functions (Deno)
+        continue-on-error: true
+        run: |
+          status=0
+          for fn in supabase/functions/*/index.ts; do
+            echo "::group::deno check $fn"
+            deno check "$fn" || status=1
+            echo "::endgroup::"
+          done
+          exit $status

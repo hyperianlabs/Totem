@@ -67,6 +67,23 @@ the SQL Editor by hand — that's the exact failure mode that caused several
 features (staff management, club self-deletion, save-conflict protection,
 payments) to silently not work for weeks.
 
+## Quality gate
+
+`node scripts/check.mjs` is the project's static gate: it syntax-checks all
+browser JS, validates `manifest.json` + `config.js`, and fails if any
+client-side file or edge function contains a secret. It's a single dependency-
+free Node script (no `package.json` / `npm install`) — deliberately, so it
+can't trip Vercel into a build step on this no-build static site. Run
+`node scripts/check.mjs` before committing, especially after editing `app.js`
+or `config.js`.
+
+A ready-to-use GitHub Actions workflow that runs the gate on every push/PR
+(plus a non-blocking `deno check` of the edge functions) is in
+`docs/ci-workflow.yml`. It lives there because the CLI's git token lacks the
+GitHub `workflow` scope; install it once by copying it to
+`.github/workflows/ci.yml` via the GitHub web UI (Add file → Create file), or
+push it with a personal access token that has `workflow` scope.
+
 ## Hard-won lessons (don't relearn these the hard way)
 
 - **Webhook raw body integrity**: Paystack (and any HMAC signature
