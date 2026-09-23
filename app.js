@@ -351,7 +351,11 @@
     }
   });
 
-  document.getElementById("forgotPasswordLink").addEventListener("click", async (e) => {
+  // Optional chaining guard: these auth/reset-flow elements live in the real
+  // app's markup (index.html). demo.html carries its own copy of the login
+  // card, so if it ever drifts out of sync again a missing element here must
+  // not throw and abort the whole script before enterDemoMode() runs.
+  document.getElementById("forgotPasswordLink")?.addEventListener("click", async (e) => {
     e.preventDefault();
     const email = document.getElementById("authEmail").value.trim();
     if(!email){ authError("Enter your email above first, then click \"Forgot password?\"."); return; }
@@ -361,7 +365,7 @@
     authInfoMsg(`If ${email} has a Totem account, a password reset link has been sent — check your inbox (and spam folder).`);
   });
 
-  document.getElementById("btnConfirmReset").addEventListener("click", async () => {
+  document.getElementById("btnConfirmReset")?.addEventListener("click", async () => {
     const btn = document.getElementById("btnConfirmReset");
     btn.disabled = true;
     btn.textContent = "Verifying…";
@@ -399,7 +403,7 @@
       document.getElementById("resetPasswordCard").style.display = "";
     }
   });
-  document.getElementById("btnSetNewPassword").addEventListener("click", async () => {
+  document.getElementById("btnSetNewPassword")?.addEventListener("click", async () => {
     const pw = document.getElementById("newPassword").value;
     const pwConfirm = document.getElementById("newPasswordConfirm").value;
     const errEl = document.getElementById("resetPasswordError");
