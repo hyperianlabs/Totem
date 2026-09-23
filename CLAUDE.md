@@ -83,11 +83,19 @@ payments) to silently not work for weeks.
 - **Migration hygiene**: login-time migrations must be flagged run-once, or
   they re-trigger on every login. (Source of a past "Athletics ghost data"
   bug — data reappearing after deletion.)
-- **Age-group derivation**: age groups are derived dynamically from the
-  actual roster, not a fixed canonical list. The mapping is `U(age+1)` —
-  e.g. age 8 plays U9, age 9 plays U10, ..., age 18+ is Senior. Don't
-  hardcode band lists like `["U12","U15","U18"]`; always derive and sort
-  numerically with Senior last.
+- **Age-group derivation**: a player's age group is based on the age they
+  TURN during the current calendar year (standard SA school-sport age
+  grading), via `ageGroupForPlayer` → `U<turning-age>`. The bands are a
+  FIXED canonical list `CANONICAL_AGE_GROUPS = ["U6" … "U18"]` (see
+  `app.js`); there is intentionally **no "Senior" band** — anyone turning 18
+  or older is folded into **U18** (`ageGroup(t): t >= 18 → "U18"`). This is a
+  deliberate product choice for a schools app (U18 is the oldest school
+  grade), NOT the old "derive-from-roster, Senior-last" model an earlier
+  version of this note described. Known edge case / open product question: a
+  19-year-old (e.g. a repeater) pools into U18 with 17-year-olds — revisit if
+  a real Senior/open-age band is ever needed. Add-player validation rejects
+  ages below the U6 floor. Don't reintroduce a "Senior" band or a
+  derive-from-roster tab list without a product decision.
 - **Optimistic concurrency**: saves check `updated_at` before writing and
   warn on conflict rather than silently overwriting — important in
   multi-session/multi-tab scenarios. Preserve this pattern for new

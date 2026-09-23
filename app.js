@@ -1111,6 +1111,10 @@
   // affect zero rows instead of silently overwriting their changes.
   let lastKnownUpdatedAt = null;
   let conflictDialogShowing = false;
+  // Set when the user chose to keep working after a save-conflict instead of
+  // reloading. While set, saves are held (rather than silently failing or
+  // re-prompting a modal on every edit) until the data is reloaded.
+  let conflictPending = false;
 
   async function fetchClubState(){
     const { data, error } = await supabaseClient
@@ -1126,6 +1130,14 @@
     return data ? data.data : null;
   }
   async function persistClubState(){
+    // A prior save hit a conflict and the user chose to keep working rather
+    // than reload. Don't keep firing the update (it would fail the same way
+    // and re-prompt on every edit) — hold saves and remind them to reload.
+    if(conflictPending){
+      showToast("Your changes aren't being saved — reload to get the latest version first.");
+      return;
+    }
+
     let query = supabaseClient
       .from("org_state")
       .update({ data: state, updated_by: currentUser ? currentUser.id : null })
@@ -1136,7 +1148,10 @@
     const { data, error } = await query.select("updated_at");
 
     if(error){
+      // Surface the failure — the UI already showed the change optimistically,
+      // so a silent failure would leave the user believing it saved.
       console.warn("Totem: could not save —", error.message);
+      showToast("⚠ Couldn't save your last change — check your connection and try again.");
       return;
     }
 
@@ -1159,8 +1174,12 @@
       "Click Cancel to keep working here for now — but saving will keep failing the same way until you reload."
     );
     if(wantsReload){
-      await loadState();
+      await loadState(); // clears conflictPending on success
       showToast("Reloaded the latest version.");
+    } else {
+      // Keep working, but hold saves until they reload — otherwise every
+      // subsequent edit re-triggers this same conflict.
+      conflictPending = true;
     }
     conflictDialogShowing = false;
   }
@@ -1169,6 +1188,9 @@
     try{
       const parsed = await fetchClubState();
       if(parsed) state = Object.assign(state, parsed);
+      // Fresh data is loaded and lastKnownUpdatedAt refreshed, so any held
+      // save-conflict is resolved — saves can resume.
+      conflictPending = false;
     }catch(e){
       // no saved data yet, or a load error — start fresh in memory for this session
       console.warn("Totem: could not load saved data.", e);
@@ -1359,15 +1381,27 @@
     const board = {}; // side letter -> { position -> {player, score, trialSeconds?} }
     SIDE_LETTERS.forEach(letter => board[letter] = {});
 
+    // Tracks which players are already placed in each side, so a player who
+    // holds two positions can't fill two slots of the SAME team (which would
+    // silently leave that team a player short).
+    const usedBySide = {};
+    SIDE_LETTERS.forEach(letter => usedBySide[letter] = new Set());
+
     positionsForGroup(sport, group).forEach(position => {
       const ranked = players
         .filter(p => playerPositions(p).includes(position))
         .map(p => {
           const trial = useTrials ? bestTrialTime(sportId, p.id, position, group) : null;
+          // A non-finite trial time (e.g. from an unparseable entry, which
+          // bestTrialTime records as Infinity) is treated as "no time", so it
+          // ranks with untested athletes instead of producing an
+          // Infinity − Infinity NaN in the comparator below (which would make
+          // the sort order — and thus the selection — non-deterministic).
+          const seconds = trial && Number.isFinite(trial.seconds) ? trial.seconds : null;
           return {
             player: p,
             score: overallScore(p),
-            trialSeconds: trial ? trial.seconds : null,
+            trialSeconds: seconds,
             trialTime: trial ? trial.time : null
           };
         })
@@ -1380,8 +1414,13 @@
           return b.score - a.score || (b.player.metrics.reliability ?? 0) - (a.player.metrics.reliability ?? 0);
         });
 
-      SIDE_LETTERS.forEach((letter, idx) => {
-        board[letter][position] = ranked[idx] || null;
+      // Fill sides A→E: each side gets its best-ranked player not already used
+      // at this position and not already placed elsewhere in that same side.
+      const consumed = new Set();
+      SIDE_LETTERS.forEach(letter => {
+        const pick = ranked.find(r => !consumed.has(r.player.id) && !usedBySide[letter].has(r.player.id)) || null;
+        board[letter][position] = pick;
+        if(pick){ consumed.add(pick.player.id); usedBySide[letter].add(pick.player.id); }
       });
     });
 
@@ -5125,7 +5164,7 @@
 
     if(!name){ alert("Enter a player name."); nameInp.focus(); return; }
     if(!birthDate || turning === null){ alert("Enter a date of birth."); dobInp.focus(); return; }
-    if(turning < 4 || turning > 90){ alert("That date of birth gives an age outside the expected range — double check it."); dobInp.focus(); return; }
+    if(turning < 6 || turning > 90){ alert("That date of birth is outside the supported age range — the youngest age group is U6. Double-check the date."); dobInp.focus(); return; }
     if(positions.length === 0){ alert(isIndividual ? "Select at least one event." : "Select a position."); return; }
     if(!guardianPhone){ alert("Enter a guardian contact number — this is required so team sheets and updates can actually reach them."); guardianPhoneInp.focus(); return; }
     if(!guardianEmail){ alert("Enter a guardian email address — this is required so results and season summaries can actually reach them."); guardianEmailInp.focus(); return; }
