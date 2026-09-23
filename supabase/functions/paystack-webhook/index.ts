@@ -67,16 +67,7 @@ const PLAN_CODE_TO_TIER: Record<string, string> = {
 };
 
 async function verifySignature(bodyBuffer: ArrayBuffer, signature: string | null): Promise<boolean> {
-  // TEMPORARY DEBUG LOGGING — safe to leave the key length/prefix visible
-  // (not the full secret), remove once signature verification is confirmed
-  // working correctly.
-  console.log("DEBUG: PAYSTACK_SECRET_KEY length =", PAYSTACK_SECRET_KEY.length);
-  console.log("DEBUG: PAYSTACK_SECRET_KEY starts with =", PAYSTACK_SECRET_KEY.slice(0, 8));
-  console.log("DEBUG: received x-paystack-signature =", signature);
-  console.log("DEBUG: raw byte length =", bodyBuffer.byteLength);
-
   if (!signature || !PAYSTACK_SECRET_KEY) {
-    console.log("DEBUG: missing signature or missing key — returning false early");
     return false;
   }
   const key = await crypto.subtle.importKey(
@@ -95,21 +86,12 @@ async function verifySignature(bodyBuffer: ArrayBuffer, signature: string | null
   // same measurement.
   const mac = await crypto.subtle.sign("HMAC", key, bodyBuffer);
   const computed = Array.from(new Uint8Array(mac)).map(b => b.toString(16).padStart(2, "0")).join("");
-  console.log("DEBUG: computed signature (raw bytes) =", computed);
-  console.log("DEBUG: raw-bytes match? =", computed === signature);
-
-  console.log("DEBUG: signatures match? =", computed === signature);
   return computed === signature;
 }
 
 Deno.serve(async (req: Request) => {
   const signature = req.headers.get("x-paystack-signature");
   const bodyBuffer = await req.arrayBuffer();
-
-  // TEMPORARY DEBUG — checking whether the body itself might differ from
-  // what Paystack actually hashed, since the key has now been ruled out.
-  console.log("DEBUG: content-type header =", req.headers.get("content-type"));
-  console.log("DEBUG: content-length header =", req.headers.get("content-length"));
 
   if (!(await verifySignature(bodyBuffer, signature))) {
     console.error("Paystack webhook signature verification failed.");
@@ -119,9 +101,6 @@ Deno.serve(async (req: Request) => {
   // Only decode to a string now, after the signature check has already
   // passed against the untouched raw bytes.
   const body = new TextDecoder("utf-8").decode(bodyBuffer);
-  console.log("DEBUG: body length (decoded string) =", body.length);
-  console.log("DEBUG: body first 100 chars =", body.slice(0, 100));
-  console.log("DEBUG: body last 50 chars =", body.slice(-50));
 
   let event: any;
   try {
