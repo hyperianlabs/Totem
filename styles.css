@@ -519,6 +519,11 @@
   .slot-select:focus{outline:2px solid var(--pitch-light); outline-offset:1px;}
   .slot-unfilled-row .slot-select{color:var(--slate); font-style:italic; font-weight:500;}
 
+  /* locked (snapshotted) fixture team sheets */
+  .side-card-locked{border-color:var(--pitch-light);}
+  .locked-banner{background:#EAF3EE; color:var(--pitch-deep); font-size:11.5px; line-height:1.4; padding:7px 14px; border-bottom:1px solid var(--line);}
+  .side-card-foot{display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 14px 12px; border-top:1px dashed var(--line);}
+  .side-card-foot .lock-hint{font-size:11px; color:var(--slate);}
   .bench-block{border-top:1px dashed var(--line); padding:10px 14px 12px;}
   .bench-head{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.04em; color:var(--slate); margin-bottom:6px;}
   .bench-head .bench-sub{text-transform:none; font-weight:500; letter-spacing:0; margin-left:4px;}

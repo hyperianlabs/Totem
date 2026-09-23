@@ -1388,6 +1388,221 @@
     return board;
   }
 
+  // ---------- fixture lineup snapshots ----------
+  // computeSides() is a live function of the CURRENT roster, metrics, and even
+  // the calendar year (via age groups). That's right for planning, but it means
+  // a past fixture's team sheet would silently change whenever player data or
+  // the year later shifts. To keep "the data decided" defensible, a fixture's
+  // team for a given age-group/side can be LOCKED — frozen as an immutable
+  // snapshot stored on the fixture. Snapshots are per age-group|side WITHIN one
+  // fixture, so editing one match's locked team never bleeds into another
+  // fixture, unlike the global Team Sides planning board.
+  function lineupKey(group, side){
+    return normalizeGroupLabelKey(group) + "|" + side;
+  }
+  function fixtureLineup(f, group, side){
+    return (f && f.lineups) ? (f.lineups[lineupKey(group, side)] || null) : null;
+  }
+  // Freeze the current live resolved board for this fixture/side into a snapshot.
+  function captureFixtureLineup(f, sportId, group, side){
+    const sport = state.sports.find(s => s.id === sportId);
+    const excludeIds = unavailableIdsFor(f.id);
+    const board = computeSides(sportId, group, excludeIds);
+    const boardSide = board[side] || {};
+    const rows = positionsForGroup(sport, group).map(pos => {
+      const resolved = resolvedSlot(sportId, group, side, pos, boardSide[pos]);
+      return {
+        position: pos,
+        playerId: resolved ? resolved.player.id : null,
+        playerName: resolved ? resolved.player.name : null,
+        score: resolved && typeof resolved.score === "number" ? resolved.score : null,
+        trialTime: resolved && resolved.trialTime ? resolved.trialTime : null
+      };
+    });
+    const bench = benchFor(sportId, group, side).filter(Boolean).map(id => {
+      const p = state.players.find(pl => pl.id === id);
+      return { playerId: id, playerName: p ? p.name : null };
+    });
+    const captains = captainsFor(sportId, group, side);
+    if(!f.lineups) f.lineups = {};
+    f.lineups[lineupKey(group, side)] = {
+      rows, bench,
+      captainId: captains.captainId || null,
+      viceCaptainId: captains.viceCaptainId || null,
+      capturedAt: new Date().toISOString(),
+      capturedSeasonYear: new Date().getFullYear()
+    };
+  }
+  function clearFixtureLineup(f, group, side){
+    if(f && f.lineups) delete f.lineups[lineupKey(group, side)];
+  }
+  function snapCaptainTag(snap, playerId){
+    if(!playerId) return "";
+    if(playerId === snap.captainId) return " (C)";
+    if(playerId === snap.viceCaptainId) return " (VC)";
+    return "";
+  }
+
+  // ----- fixture team-sheet rendering: live (editable, re-derives) vs locked -----
+  function liveTeamSheetHtml(sport, f, group, side, duplicatesByGroup, excludeIds){
+    const board = computeSides(sport.id, group, excludeIds);
+    const positions = board[side] || {};
+    const groupPositions = positionsForGroup(sport, group);
+    const hasAny = groupPositions.some(pos => resolvedSlot(sport.id, group, side, pos, positions[pos]));
+    const groupCoach = coachFor(sport.id, group, side);
+    const slots = groupPositions
+      .map(pos => slotEditableHtml(sport.id, group, side, pos, positions[pos], duplicatesByGroup[group]))
+      .join("");
+    const seniorLabel = seniorSideLabel(sport, group, side);
+    return `
+      <div class="side-card">
+        <div class="side-head">
+          <span class="letter">${seniorLabel || (escapeHtml(group) + " · " + side)}</span>
+          <span class="side-name">${groupCoach ? "Coach: " + escapeHtml(groupCoach.name) : "Best available team"}</span>
+          <button class="print-btn" data-action="print-team" data-sport="${sport.id}" data-group="${escapeHtml(group)}" data-side="${side}" title="Print team sheet" type="button">${uiIcon("printer", 13)}</button>
+          <button class="print-btn" data-action="whatsapp-team" data-sport="${sport.id}" data-group="${escapeHtml(group)}" data-side="${side}" title="Share via WhatsApp" type="button">${uiIcon("chat", 13)}</button>
+        </div>
+        <div class="side-body">${hasAny ? slots : `<div class="roster-empty" style="padding:24px 14px;"><div>No rated players in this age group yet.</div></div>`}</div>
+        ${hasAny ? benchEditableHtml(sport.id, group, side) : ""}
+        ${hasAny ? `<div class="side-card-foot"><button class="btn btn-ghost btn-small" data-action="lock-team" data-sport="${sport.id}" data-group="${escapeHtml(group)}" data-side="${side}" type="button">🔒 Lock this team as the record</button><span class="lock-hint">Freezes this exact team sheet so it can't change later.</span></div>` : ""}
+      </div>
+    `;
+  }
+  function lockedTeamSheetHtml(sport, f, group, side, snap){
+    const seniorLabel = seniorSideLabel(sport, group, side);
+    const groupCoach = coachFor(sport.id, group, side);
+    const eligible = eligiblePlayersForSwap(sport.id, group);
+    const capturedLabel = snap.capturedAt ? new Date(snap.capturedAt).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "";
+    const slots = snap.rows.map((r, i) => snapshotSlotHtml(f, sport.id, group, side, i, r, snap, eligible)).join("");
+    const benchHtml = snapshotBenchHtml(f, sport.id, group, side, snap, eligible);
+    return `
+      <div class="side-card side-card-locked">
+        <div class="side-head">
+          <span class="letter">${seniorLabel || (escapeHtml(group) + " · " + side)}</span>
+          <span class="side-name">${groupCoach ? "Coach: " + escapeHtml(groupCoach.name) : "Locked team"}</span>
+          <button class="print-btn" data-action="print-team" data-sport="${sport.id}" data-group="${escapeHtml(group)}" data-side="${side}" title="Print team sheet" type="button">${uiIcon("printer", 13)}</button>
+          <button class="print-btn" data-action="whatsapp-team" data-sport="${sport.id}" data-group="${escapeHtml(group)}" data-side="${side}" title="Share via WhatsApp" type="button">${uiIcon("chat", 13)}</button>
+        </div>
+        <div class="locked-banner">🔒 Locked${capturedLabel ? " · captured " + escapeHtml(capturedLabel) : ""} — this record stays fixed even if player data or the year changes.</div>
+        <div class="side-body">${slots}</div>
+        ${benchHtml}
+        <div class="side-card-foot"><button class="btn btn-ghost btn-small" data-action="unlock-team" data-sport="${sport.id}" data-group="${escapeHtml(group)}" data-side="${side}" type="button">Unlock &amp; re-derive from live data</button></div>
+      </div>
+    `;
+  }
+  function snapshotSlotHtml(f, sportId, group, side, rowIndex, row, snap, eligible){
+    const captainTag = (pid) => snapCaptainTag(snap, pid);
+    const options = [`<option value="__empty__" ${!row.playerId ? "selected" : ""}>— Empty —</option>`];
+    if(row.playerId && !eligible.find(p => p.id === row.playerId)){
+      options.push(`<option value="${row.playerId}" selected>${escapeHtml(row.playerName || "Unknown")}${captainTag(row.playerId)} (no longer listed)</option>`);
+    }
+    eligible.forEach(p => {
+      options.push(`<option value="${p.id}" ${row.playerId === p.id ? "selected" : ""}>${escapeHtml(p.name)}${captainTag(p.id)} (${escapeHtml(playerPositions(p).join(", "))})</option>`);
+    });
+    const scoreDisplay = row.trialTime ? "⏱ " + escapeHtml(row.trialTime) : (typeof row.score === "number" ? row.score.toFixed(1) : "");
+    return `
+      <div class="side-slot">
+        <span class="slot-pos">${escapeHtml(row.position)}</span>
+        <select class="snap-slot-select" data-fixture="${f.id}" data-group="${escapeHtml(group)}" data-side="${side}" data-row="${rowIndex}">
+          ${options.join("")}
+        </select>
+        <span class="slot-score">${scoreDisplay}</span>
+      </div>
+    `;
+  }
+  function snapshotBenchHtml(f, sportId, group, side, snap, eligible){
+    const sport = state.sports.find(s => s.id === sportId);
+    const benchSize = (sport && Number.isFinite(sport.benchSize)) ? sport.benchSize : 3;
+    const bench = snap.bench || [];
+    const rows = Array.from({ length: benchSize }, (_, i) => {
+      const current = bench[i] ? bench[i].playerId : "";
+      const options = [`<option value="">— empty —</option>`];
+      if(current && !eligible.find(p => p.id === current)){
+        options.push(`<option value="${current}" selected>${escapeHtml(bench[i].playerName || "Unknown")} (no longer listed)</option>`);
+      }
+      eligible.forEach(p => {
+        options.push(`<option value="${p.id}" ${current === p.id ? "selected" : ""}>${escapeHtml(p.name)} (${escapeHtml(playerPositions(p).join(", "))})</option>`);
+      });
+      return `
+        <div class="side-slot bench-slot">
+          <span class="slot-pos">Bench ${i + 1}</span>
+          <select class="snap-bench-select" data-fixture="${f.id}" data-group="${escapeHtml(group)}" data-side="${side}" data-idx="${i}">
+            ${options.join("")}
+          </select>
+        </div>
+      `;
+    }).join("");
+    return `<div class="bench-block">
+      <div class="bench-head">Bench <span class="bench-sub">part of this match's locked record</span></div>
+      ${rows}
+    </div>`;
+  }
+  // Wire the locked-snapshot selects + lock/unlock buttons within a container.
+  function wireSnapshotSelects(container){
+    container.querySelectorAll(".snap-slot-select").forEach(sel => {
+      sel.addEventListener("change", (e) => {
+        const { fixture: fid, group, side, row } = e.target.dataset;
+        const f = state.fixtures.find(x => x.id === fid);
+        const snap = fixtureLineup(f, group, side);
+        if(!snap) return;
+        const r = snap.rows[+row];
+        if(!r) return;
+        const val = e.target.value;
+        if(val === "__empty__"){ r.playerId = null; r.playerName = null; }
+        else {
+          const p = state.players.find(pl => pl.id === val);
+          r.playerId = val;
+          r.playerName = p ? p.name : r.playerName;
+          r.score = p && typeof overallScore(p) === "number" ? overallScore(p) : null;
+          r.trialTime = null;
+        }
+        saveState();
+        renderFixtureDetail();
+      });
+    });
+    container.querySelectorAll(".snap-bench-select").forEach(sel => {
+      sel.addEventListener("change", (e) => {
+        const { fixture: fid, group, side, idx } = e.target.dataset;
+        const f = state.fixtures.find(x => x.id === fid);
+        const snap = fixtureLineup(f, group, side);
+        if(!snap) return;
+        if(!snap.bench) snap.bench = [];
+        const val = e.target.value;
+        if(!val){ snap.bench[+idx] = null; }
+        else {
+          const p = state.players.find(pl => pl.id === val);
+          snap.bench[+idx] = { playerId: val, playerName: p ? p.name : null };
+        }
+        snap.bench = snap.bench.filter(Boolean);
+        saveState();
+        renderFixtureDetail();
+      });
+    });
+    container.querySelectorAll('[data-action="lock-team"]').forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const f = state.fixtures.find(x => x.id === openFixtureId);
+        if(!f) return;
+        captureFixtureLineup(f, btn.dataset.sport, btn.dataset.group, btn.dataset.side);
+        saveState();
+        renderFixtureDetail();
+        showToast("Team locked — this sheet is now a fixed record.");
+      });
+    });
+    container.querySelectorAll('[data-action="unlock-team"]').forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const f = state.fixtures.find(x => x.id === openFixtureId);
+        if(!f) return;
+        if(!confirm("Unlock this team? It will go back to re-deriving from current player data, and the frozen record will be discarded.")) return;
+        clearFixtureLineup(f, btn.dataset.group, btn.dataset.side);
+        saveState();
+        renderFixtureDetail();
+        showToast("Team unlocked — now showing the live best team.");
+      });
+    });
+  }
+
   // ---------- manual team-list overrides (injury / illness swaps) ----------
   // Auto-selected sides from computeSides() can be overridden slot-by-slot.
   // Overrides are keyed by sport+age group+side+position so an edit made from
@@ -2687,28 +2902,12 @@
     });
 
     const groupsHtml = f.entries.map(({ ageGroup: group, side }) => {
-      const board = computeSides(sport.id, group, excludeIds);
-      const positions = board[side] || {};
-      const groupPositions = positionsForGroup(sport, group);
-      const hasAny = groupPositions.some(pos => resolvedSlot(sport.id, group, side, pos, positions[pos]));
-      const groupCoach = coachFor(sport.id, group, side);
-      const slots = groupPositions
-        .map(pos => slotEditableHtml(sport.id, group, side, pos, positions[pos], duplicatesByGroup[group]))
-        .join("");
-
-      const seniorLabel = seniorSideLabel(sport, group, side);
-      const teamSheet = `
-        <div class="side-card">
-          <div class="side-head">
-            <span class="letter">${seniorLabel || (escapeHtml(group) + " · " + side)}</span>
-            <span class="side-name">${groupCoach ? "Coach: " + escapeHtml(groupCoach.name) : "Best available team"}</span>
-            <button class="print-btn" data-action="print-team" data-sport="${sport.id}" data-group="${escapeHtml(group)}" data-side="${side}" title="Print team sheet" type="button">${uiIcon("printer", 13)}</button>
-            <button class="print-btn" data-action="whatsapp-team" data-sport="${sport.id}" data-group="${escapeHtml(group)}" data-side="${side}" title="Share via WhatsApp" type="button">${uiIcon("chat", 13)}</button>
-          </div>
-          <div class="side-body">${hasAny ? slots : `<div class="roster-empty" style="padding:24px 14px;"><div>No rated players in this age group yet.</div></div>`}</div>
-          ${hasAny ? benchEditableHtml(sport.id, group, side) : ""}
-        </div>
-      `;
+      // A locked team renders read-from-snapshot (editable in place, per this
+      // fixture); an unlocked team renders the live, re-deriving board.
+      const snap = fixtureLineup(f, group, side);
+      const teamSheet = snap
+        ? lockedTeamSheetHtml(sport, f, group, side, snap)
+        : liveTeamSheetHtml(sport, f, group, side, duplicatesByGroup, excludeIds);
 
       const result = resultFor(f.id, group, side);
       const resultPanel = renderResultPanel(sport, f, group, side, result);
@@ -2732,6 +2931,7 @@
 
     wireSlotSelects(el);
     wireBenchSelects(el);
+    wireSnapshotSelects(el);
     wireAvailabilityToggles(el);
     el.querySelectorAll('[data-action="capture-result"]').forEach(btn => {
       btn.addEventListener("click", (e) => {
@@ -3439,6 +3639,16 @@
       resultDraft.id = uid();
       state.results.push(resultDraft);
     }
+
+    // Capturing a result freezes the team that played it — so this match's
+    // team sheet becomes a permanent record that won't shift if player data
+    // or the calendar year later changes. Don't clobber an already-locked
+    // lineup the coach may have hand-adjusted.
+    const resultFixture = state.fixtures.find(x => x.id === resultDraft.fixtureId);
+    if(resultFixture && sportType(sport) !== "individual" && !fixtureLineup(resultFixture, resultDraft.ageGroup, resultDraft.side)){
+      captureFixtureLineup(resultFixture, resultDraft.sportId, resultDraft.ageGroup, resultDraft.side);
+    }
+
     document.getElementById("resultModal").classList.remove("open");
     saveState();
     renderFixtureList();
@@ -3709,7 +3919,7 @@
     const label = seniorSideLabel(sport, group, side) || `${group} ${side}`;
     const groupCoach = coachFor(sportId, group, side);
     const excludeIds = fixture ? unavailableIdsFor(fixture.id) : null;
-    const { rows, bench } = collectTeamSheetRows(sportId, group, side, excludeIds);
+    const { rows, bench } = collectTeamSheetRows(sportId, group, side, excludeIds, fixture);
 
     let text = `*${sport.name} — ${label}*\n`;
     if(fixture){
@@ -3888,7 +4098,20 @@
     if(e.target.id === "whatsappShareModal") document.getElementById("whatsappShareModal").classList.remove("open");
   });
 
-  function collectTeamSheetRows(sportId, group, side, excludeIds){
+  function collectTeamSheetRows(sportId, group, side, excludeIds, fixture){
+    // If this fixture's team is locked, the printed / shared / emailed sheet
+    // must come from the frozen snapshot, not a fresh live re-derivation.
+    const snap = fixture ? fixtureLineup(fixture, group, side) : null;
+    if(snap){
+      const rows = snap.rows.map(r => ({
+        position: r.position,
+        name: r.playerName ? r.playerName + snapCaptainTag(snap, r.playerId) : "—"
+      }));
+      const bench = (snap.bench || [])
+        .filter(b => b && b.playerName)
+        .map(b => b.playerName + snapCaptainTag(snap, b.playerId));
+      return { rows, bench };
+    }
     const sport = state.sports.find(s => s.id === sportId);
     const positions = positionsForGroup(sport, group);
     const board = computeSides(sportId, group, excludeIds);
@@ -3998,7 +4221,7 @@
     const sport = state.sports.find(s => s.id === sportId);
     const label = seniorSideLabel(sport, group, side) || `${group} · ${side}`;
     const excludeIds = fixture ? unavailableIdsFor(fixture.id) : null;
-    const { rows, bench } = collectTeamSheetRows(sportId, group, side, excludeIds);
+    const { rows, bench } = collectTeamSheetRows(sportId, group, side, excludeIds, fixture);
     const title = `${sport.name} — ${label}`;
     const groupCoach = coachFor(sportId, group, side);
     let subtitle;
@@ -4334,7 +4557,7 @@
       if(!coach || !coach.email) return;
       const label = seniorSideLabel(sport, en.ageGroup, en.side) || `${en.ageGroup} ${en.side}`;
       const excludeIds = unavailableIdsFor(fixture.id);
-      const { rows, bench } = collectTeamSheetRows(sport.id, en.ageGroup, en.side, excludeIds);
+      const { rows, bench } = collectTeamSheetRows(sport.id, en.ageGroup, en.side, excludeIds, fixture);
       const key = coach.email.toLowerCase().trim();
       if(!byCoach[key]) byCoach[key] = { coachEmail: coach.email, coachName: coach.name, sides: [] };
       byCoach[key].sides.push({ sideLabel: label, rows, bench });
