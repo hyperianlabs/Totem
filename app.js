@@ -37,6 +37,137 @@
     try{ return localStorage.getItem("totem_signup_source") || null; }catch(e){ return null; }
   }
 
+  // ---------- native-app detection ----------
+  // True only when running inside a native wrapper (Capacitor). On the plain
+  // web PWA this is always false, so nothing changes for web users. Apple's
+  // App Store rules (Guideline 3.1.1) forbid selling digital subscriptions via
+  // an external processor (Paystack) inside a native app, so every upgrade /
+  // checkout surface is hidden when this is true — subscriptions stay a
+  // web-only action. Kept forward-compatible: when the app is later packaged
+  // with Capacitor, window.Capacitor.isNativePlatform() flips this on with no
+  // further code change here.
+  function isNativeApp(){
+    try{
+      return !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === "function" && window.Capacitor.isNativePlatform());
+    }catch(e){ return false; }
+  }
+
+  // ---------- in-DOM dialogs (WebView-safe replacements for confirm()/prompt()) ----------
+  // Native prompt() returns null inside iOS WKWebView and many Android WebView
+  // wrappers, which would silently break every "type the name to confirm"
+  // deletion once the app is packaged for the stores — including in-app account
+  // deletion, which Apple and Google both require to work. These promise-based
+  // modals reuse the app's own .overlay/.modal styling so they behave
+  // identically on the web and inside a native shell.
+  function uiDialog(opts){
+    // opts: { title, message, input:{label,default}|null, confirmLabel, danger }
+    // resolves: { confirmed:boolean, value:string }
+    return new Promise((resolve) => {
+      const overlay = document.createElement("div");
+      overlay.className = "overlay open";
+      overlay.style.zIndex = "9999";
+      const hasInput = !!opts.input;
+      overlay.innerHTML = `
+        <div class="modal" role="dialog" aria-modal="true" aria-label="${escapeHtml(opts.title || "Confirm")}">
+          <h3>${escapeHtml(opts.title || "Please confirm")}</h3>
+          ${opts.message ? `<p style="white-space:pre-wrap; font-size:13px; line-height:1.5; color:var(--slate); margin:0 0 14px;">${escapeHtml(opts.message)}</p>` : ""}
+          ${hasInput ? `<div class="field"><label style="display:block; font-size:12px; margin-bottom:4px;">${escapeHtml(opts.input.label || "")}</label><input type="text" autocomplete="off" spellcheck="false"></div>` : ""}
+          <div class="modal-actions">
+            <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+            <button type="button" class="btn${opts.danger ? " btn-danger" : ""}" data-confirm>${escapeHtml(opts.confirmLabel || "Confirm")}</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      const inputEl = overlay.querySelector("input");
+      if(inputEl && opts.input.default) inputEl.value = opts.input.default;
+      if(inputEl) setTimeout(() => { inputEl.focus(); inputEl.select(); }, 30);
+      let settled = false;
+      const done = (confirmed) => {
+        if(settled) return; settled = true;
+        const value = inputEl ? inputEl.value : "";
+        document.removeEventListener("keydown", onEsc);
+        overlay.remove();
+        resolve({ confirmed, value });
+      };
+      function onEsc(e){ if(e.key === "Escape") done(false); }
+      overlay.addEventListener("click", (e) => { if(e.target === overlay) done(false); });
+      overlay.querySelector("[data-cancel]").addEventListener("click", () => done(false));
+      overlay.querySelector("[data-confirm]").addEventListener("click", () => done(true));
+      if(inputEl) inputEl.addEventListener("keydown", (e) => { if(e.key === "Enter"){ e.preventDefault(); done(true); } });
+      document.addEventListener("keydown", onEsc);
+    });
+  }
+  // Type-to-confirm destructive action. Returns true only on an exact match.
+  async function confirmByTyping(requiredText, opts){
+    opts = opts || {};
+    const r = await uiDialog({
+      title: opts.title || "Confirm deletion",
+      message: opts.message,
+      input: { label: `Type "${requiredText}" exactly to confirm:` },
+      confirmLabel: opts.confirmLabel || "Delete",
+      danger: true
+    });
+    return r.confirmed && r.value === requiredText;
+  }
+  // Plain yes/no confirmation (WebView-safe replacement for confirm()).
+  async function confirmAction(opts){
+    opts = opts || {};
+    const r = await uiDialog({
+      title: opts.title || "Please confirm",
+      message: opts.message,
+      confirmLabel: opts.confirmLabel || "Continue",
+      danger: !!opts.danger
+    });
+    return r.confirmed;
+  }
+  // Text prompt (WebView-safe replacement for prompt()). Returns the trimmed
+  // string, or null if cancelled.
+  async function promptText(opts){
+    opts = opts || {};
+    const r = await uiDialog({
+      title: opts.title || "",
+      message: opts.message,
+      input: { label: opts.label || "", default: opts.defaultValue || "" },
+      confirmLabel: opts.confirmLabel || "Save"
+    });
+    return r.confirmed ? (r.value || "").trim() : null;
+  }
+
+  // ---------- 18+ age gate ----------
+  // Store requirement (App Store 5.1.4 / Google Play Families): because Totem
+  // holds information about players, some of whom are minors, the app confirms
+  // on first launch that the person setting it up is an adult acting for a
+  // school or club. Persisted in localStorage so it only appears once.
+  function isAgeConfirmed(){
+    try{ return localStorage.getItem("totem_age_confirmed") === "1"; }
+    catch(e){ return true; } // storage blocked (private mode) — don't hard-block entry
+  }
+  function showAgeGate(onConfirm){
+    const overlay = document.createElement("div");
+    overlay.className = "overlay open";
+    overlay.style.zIndex = "10000";
+    overlay.innerHTML = `
+      <div class="modal" role="dialog" aria-modal="true" aria-label="Age confirmation" style="max-width:420px; text-align:center;">
+        <img src="totem-icon-white.png" alt="" style="height:44px; margin:0 auto 12px; display:block;" onerror="this.style.display='none'">
+        <h3 style="justify-content:center;">Before you start</h3>
+        <p style="font-size:13px; line-height:1.55; color:var(--slate); margin:0 0 8px;">Totem is a team-management tool for coaches, teachers and club staff. You must be <strong>18 or older</strong> to create or manage an account.</p>
+        <p style="font-size:12px; line-height:1.5; color:var(--slate); margin:0 0 16px;">Totem holds information about players, some of whom are minors. By continuing you confirm you are an adult acting on behalf of a school or club, and that you will handle players' information responsibly and in line with our <a href="privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</p>
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <button type="button" class="btn" data-age-yes>I am 18 or older — continue</button>
+          <button type="button" class="btn btn-ghost" data-age-no>I am under 18</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector("[data-age-yes]").addEventListener("click", () => {
+      try{ localStorage.setItem("totem_age_confirmed", "1"); }catch(e){}
+      overlay.remove();
+      onConfirm();
+    });
+    overlay.querySelector("[data-age-no]").addEventListener("click", () => {
+      overlay.querySelector(".modal").innerHTML = `<h3 style="justify-content:center;">Sorry</h3><p style="font-size:13px; line-height:1.55; color:var(--slate); text-align:center; margin:0;">You need to be 18 or older to use Totem. If a coach or teacher manages your team, they can use Totem on your team's behalf.</p>`;
+    });
+  }
+
   // A link like index.html?mode=signup (used by the marketing landing
   // page's "Start free trial" buttons) jumps straight to the Sign Up tab,
   // rather than landing someone on Log In after they just read a pitch
@@ -112,9 +243,17 @@
     if(kind === "sports") return state.sports.length >= limit;
     return false;
   }
-  function showUpgradePrompt(message){
+  async function showUpgradePrompt(message){
     const tier = currentRequiredTier();
-    const ok = confirm(`${message}\n\nContinue to checkout for the ${tier.label} plan — R${tier.priceZAR}/month (excl. VAT)?`);
+    if(isNativeApp()){
+      showToast("Plans and payments are managed on the Totem website.");
+      return;
+    }
+    const ok = await confirmAction({
+      title: "Upgrade your plan",
+      message: `${message}\n\nContinue to checkout for the ${tier.label} plan — R${tier.priceZAR}/month (excl. VAT)?`,
+      confirmLabel: "Continue to checkout"
+    });
     if(ok) startPaystackCheckout(tier.id);
   }
   function renderUsageBanner(){
@@ -124,9 +263,15 @@
       const reason = daysSinceOrgCreated() >= FREE_PLAN_MAX_DAYS
         ? `You've been using Totem free for over ${Math.floor(FREE_PLAN_MAX_DAYS / 30)} months`
         : `You've captured ${totalResultsCaptured()} results`;
-      el.innerHTML = `${reason} — time to move to a paid plan to keep going. <button type="button" id="usageBannerUpgrade">Upgrade</button>`;
+      if(isNativeApp()){
+        // Native (App Store 3.1.1): no in-app purchase CTA — direct to the web.
+        el.innerHTML = `${reason} — visit the Totem website to choose a plan and keep going.`;
+      } else {
+        el.innerHTML = `${reason} — time to move to a paid plan to keep going. <button type="button" id="usageBannerUpgrade">Upgrade</button>`;
+      }
       el.style.display = "flex";
-      document.getElementById("usageBannerUpgrade").addEventListener("click", () => {
+      const usageUpgradeBtn = document.getElementById("usageBannerUpgrade");
+      if(usageUpgradeBtn) usageUpgradeBtn.addEventListener("click", () => {
         showUpgradePrompt("Ready to upgrade?");
       });
     } else {
@@ -447,11 +592,11 @@
     } else {
       warning += `\n\nYou'll lose access to "${currentOrgName || "your club"}". The club and its data stay with the remaining staff.`;
     }
-    if(!confirm(warning + "\n\nContinue?")) return;
-    if(prompt('Type "DELETE" to confirm permanently deleting your account:') !== "DELETE"){
-      alert("That didn't match — nothing was deleted.");
-      return;
-    }
+    if(!await confirmByTyping("DELETE", {
+      title: "Delete your account",
+      message: warning,
+      confirmLabel: "Delete my account"
+    })) return;
 
     const { data: { session } } = await supabaseClient.auth.getSession();
     try{
@@ -724,9 +869,14 @@
 
     listEl.querySelectorAll("[data-admin-rename]").forEach(btn => {
       btn.addEventListener("click", async () => {
-        const newName = prompt("New name for this club:", btn.dataset.currentName);
-        if(!newName || !newName.trim() || newName.trim() === btn.dataset.currentName) return;
-        const { error } = await supabaseClient.from("organizations").update({ name: newName.trim() }).eq("id", btn.dataset.adminRename);
+        const newName = await promptText({
+          title: "Rename club",
+          label: "New name for this club:",
+          defaultValue: btn.dataset.currentName,
+          confirmLabel: "Rename"
+        });
+        if(!newName || newName === btn.dataset.currentName) return;
+        const { error } = await supabaseClient.from("organizations").update({ name: newName }).eq("id", btn.dataset.adminRename);
         if(error){ alert("Could not rename — " + error.message); return; }
         loadPlatformAdminList();
       });
@@ -735,8 +885,11 @@
       btn.addEventListener("click", async () => {
         const name = btn.dataset.name;
         const orgId = btn.dataset.adminDelete;
-        if(!confirm(`Permanently delete "${name}"?\n\nThis removes the club and ALL its data (players, fixtures, results — everything). Staff whose only club this is will have their login deleted too, freeing their email to sign up fresh elsewhere. Anyone who also belongs to another club keeps their login. This cannot be undone.`)) return;
-        if(prompt(`Type the club's name exactly to confirm deletion:`) !== name) { alert("Name didn't match — nothing was deleted."); return; }
+        if(!await confirmByTyping(name, {
+          title: `Delete "${name}"`,
+          message: `Permanently delete "${name}"?\n\nThis removes the club and ALL its data (players, fixtures, results — everything). Staff whose only club this is will have their login deleted too, freeing their email to sign up fresh elsewhere. Anyone who also belongs to another club keeps their login. This cannot be undone.`,
+          confirmLabel: "Delete club"
+        })) return;
 
         const { data: { session } } = await supabaseClient.auth.getSession();
         try{
@@ -774,11 +927,11 @@
     else warning += `\n\nYour login will be deleted too, unless you also belong to another club — freeing your email to sign up fresh if you ever want to.`;
     warning += `\n\nThis cannot be undone by you, or by anyone else, including support.`;
 
-    if(!confirm(warning + "\n\nContinue?")) return;
-    if(prompt(`Type "${currentOrgName}" exactly to confirm permanent deletion:`) !== currentOrgName){
-      alert("Name didn't match — nothing was deleted.");
-      return;
-    }
+    if(!await confirmByTyping(currentOrgName, {
+      title: `Delete "${currentOrgName}"`,
+      message: warning,
+      confirmLabel: "Delete club"
+    })) return;
 
     const { data: { session } } = await supabaseClient.auth.getSession();
     try{
@@ -833,25 +986,35 @@
 
   // persistSession is off, so this will normally find nothing and show the
   // login screen — but check anyway in case a session is still live in-memory.
-  if(window.TOTEM_DEMO_MODE){
-    // Deferred: enterDemoMode() and the demo data it needs are defined much
-    // further down this file (after the sport templates). Calling it
-    // synchronously here, before the rest of the script has finished
-    // running, would hit those consts before they exist.
-    setTimeout(enterDemoMode, 0);
-  } else if(pendingVerifyTokenHash){
-    if(pendingVerifyType === "signup"){
-      document.getElementById("confirmResetTagline").textContent = "Confirm your email";
-      document.getElementById("confirmResetMessage").textContent = "Click below to confirm your email and finish setting up your account.";
+  function startTotem(){
+    if(window.TOTEM_DEMO_MODE){
+      // Deferred: enterDemoMode() and the demo data it needs are defined much
+      // further down this file (after the sport templates). Calling it
+      // synchronously here, before the rest of the script has finished
+      // running, would hit those consts before they exist.
+      setTimeout(enterDemoMode, 0);
+    } else if(pendingVerifyTokenHash){
+      if(pendingVerifyType === "signup"){
+        document.getElementById("confirmResetTagline").textContent = "Confirm your email";
+        document.getElementById("confirmResetMessage").textContent = "Click below to confirm your email and finish setting up your account.";
+      }
+      document.getElementById("authShell").style.display = "flex";
+      document.getElementById("loginSignupCard").style.display = "none";
+      document.getElementById("confirmResetCard").style.display = "";
+    } else {
+      supabaseClient.auth.getSession().then(({ data }) => {
+        if(data.session && data.session.user) resolveOrgAndEnter(data.session.user);
+        else showAuth();
+      });
     }
-    document.getElementById("authShell").style.display = "flex";
-    document.getElementById("loginSignupCard").style.display = "none";
-    document.getElementById("confirmResetCard").style.display = "";
+  }
+
+  // 18+ age gate runs before the normal entry flow. Demo mode and email
+  // verification/recovery deep-links bypass it so they're never blocked.
+  if(window.TOTEM_DEMO_MODE || pendingVerifyTokenHash || isAgeConfirmed()){
+    startTotem();
   } else {
-    supabaseClient.auth.getSession().then(({ data }) => {
-      if(data.session && data.session.user) resolveOrgAndEnter(data.session.user);
-      else showAuth();
-    });
+    showAgeGate(startTotem);
   }
 
   // ---------- default data ----------
@@ -998,6 +1161,13 @@
   // integration has always been built around. This just starts that flow
   // and gives the person a clear "we're waiting on confirmation" message.
   function startPaystackCheckout(tierId){
+    // Hard safety net: never open external checkout inside a native app
+    // (App Store 3.1.1). Every UI path that reaches here is already hidden on
+    // native, but this guarantees it even if one is missed.
+    if(isNativeApp()){
+      showToast("Plans and payments are managed on the Totem website.");
+      return;
+    }
     const tier = SUBSCRIPTION_TIERS[tierIndexById(tierId)];
     const planCode = PAYSTACK_PLAN_CODES[tierId];
     if(!tier || !planCode){
@@ -1048,8 +1218,17 @@
     const currentTier = SUBSCRIPTION_TIERS[currentTierIdx];
     if(newSportsCount <= currentTier.maxSports && newCoachCount <= currentTier.maxCoaches) return true;
     const needed = tierForUsage(newSportsCount, newCoachCount);
-    const ok = confirm(`This needs the ${needed.label} plan (R${needed.priceZAR}/month, excl. VAT) — you're currently on ${currentTier.label} (R${currentTier.priceZAR}/month).\n\nContinue to checkout now?`);
-    if(ok) startPaystackCheckout(needed.id);
+    if(isNativeApp()){
+      // Native (App Store 3.1.1): can't route to external checkout. Block the
+      // change and point to the web to manage the plan.
+      showToast(`This needs the ${needed.label} plan — upgrade on the Totem website to unlock it.`);
+      return false;
+    }
+    confirmAction({
+      title: "Plan upgrade needed",
+      message: `This needs the ${needed.label} plan (R${needed.priceZAR}/month, excl. VAT) — you're currently on ${currentTier.label} (R${currentTier.priceZAR}/month).\n\nContinue to checkout now?`,
+      confirmLabel: "Continue to checkout"
+    }).then((ok) => { if(ok) startPaystackCheckout(needed.id); });
     return false;
   }
 
@@ -1075,7 +1254,10 @@
     if(isFreePlan()){
       const daysLeft = Math.max(0, Math.round(FREE_PLAN_MAX_DAYS - daysSinceOrgCreated()));
       box.className = "consent-status-box unconfirmed";
-      box.innerHTML = `Free trial${daysLeft > 0 ? ` — ${daysLeft} day${daysLeft === 1 ? "" : "s"} remaining` : " — trial period has ended"}.<br>Based on your current sports &amp; coaches, you'd be on the <strong>${escapeHtml(tier.label)}</strong> plan — R${tier.priceZAR}/month (${vatNote}) once you upgrade.${founderNote}<br><button type="button" id="subscriptionUpgradeNow" style="margin-top:10px;">Upgrade now</button>`;
+      const upgradeControl = isNativeApp()
+        ? `<br><span style="display:inline-block; margin-top:10px; font-size:12px; color:var(--slate);">Visit the Totem website to choose a plan and upgrade.</span>`
+        : `<br><button type="button" id="subscriptionUpgradeNow" style="margin-top:10px;">Upgrade now</button>`;
+      box.innerHTML = `Free trial${daysLeft > 0 ? ` — ${daysLeft} day${daysLeft === 1 ? "" : "s"} remaining` : " — trial period has ended"}.<br>Based on your current sports &amp; coaches, you'd be on the <strong>${escapeHtml(tier.label)}</strong> plan — R${tier.priceZAR}/month (${vatNote}) once you upgrade.${founderNote}${upgradeControl}`;
       const upgradeBtn = document.getElementById("subscriptionUpgradeNow");
       if(upgradeBtn) upgradeBtn.addEventListener("click", () => startPaystackCheckout(tier.id));
     } else {
@@ -2012,7 +2194,7 @@
     });
   }
 
-  function confirmRemoveSport(sportId){
+  async function confirmRemoveSport(sportId){
     const sport = state.sports.find(s => s.id === sportId);
     if(!sport) return;
     if(state.sports.length <= 1){ alert("You need at least one sport — add another before removing this one."); return; }
@@ -2036,10 +2218,19 @@
       ? `Removing ${sport.name} permanently deletes everything tied to it: ${summary}. This cannot be undone.`
       : `Removing ${sport.name} — it has no players or data yet, this is safe.`;
 
-    if(!confirm(`${warning}\n\nContinue?`)) return;
-    if(summary && prompt(`Type "${sport.name}" exactly to confirm deletion:`) !== sport.name){
-      alert("Name didn't match — nothing was removed.");
-      return;
+    if(summary){
+      if(!await confirmByTyping(sport.name, {
+        title: `Remove ${sport.name}`,
+        message: warning,
+        confirmLabel: "Remove sport"
+      })) return;
+    } else {
+      if(!await confirmAction({
+        title: `Remove ${sport.name}`,
+        message: warning,
+        confirmLabel: "Remove sport",
+        danger: true
+      })) return;
     }
 
     const fixtureIds = new Set(state.fixtures.filter(f => f.sportId === sportId).map(f => f.id));
