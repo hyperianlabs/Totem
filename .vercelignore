@@ -1,0 +1,4 @@
+# The native/ folder is the Capacitor iOS/Android project (its own npm project).
+# Keep it out of the Vercel static deploy so it can never trip a build step —
+# the live site is the plain static files at the repo root.
+native/

@@ -1,0 +1,8 @@
+# Capacitor / Node
+node_modules/
+
+# Derived: populated by ./sync-web.sh from the repo root, never edited by hand.
+www/
+
+# macOS
+.DS_Store

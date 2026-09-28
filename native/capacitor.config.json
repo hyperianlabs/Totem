@@ -1,0 +1,18 @@
+{
+  "appId": "com.hyperianlabs.totem",
+  "appName": "Totem",
+  "webDir": "www",
+  "backgroundColor": "#0A1C2C",
+  "ios": {
+    "backgroundColor": "#0A1C2C",
+    "contentInset": "always",
+    "limitsNavigationsToAppBoundDomains": false
+  },
+  "android": {
+    "backgroundColor": "#0A1C2C"
+  },
+  "server": {
+    "androidScheme": "https",
+    "iosScheme": "https"
+  }
+}

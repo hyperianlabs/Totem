@@ -605,7 +605,11 @@
 <script src="config.js"></script>
 <script src="app.js"></script>
 <script>
-  if("serviceWorker" in navigator){
+  // Skip the service worker inside the native (Capacitor) shell — assets are
+  // already bundled there, so an SW gives no benefit and caching app HTML in a
+  // WebView risks a stale-deploy loop. Web PWA behaviour is unchanged.
+  var __isNativeShell = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  if("serviceWorker" in navigator && !__isNativeShell){
     window.addEventListener("load", () => {
       navigator.serviceWorker.register("service-worker.js").catch(() => {
         // PWA install/offline support just won't be available this session — the
